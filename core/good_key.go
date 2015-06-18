@@ -9,6 +9,8 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	blog "github.com/letsencrypt/boulder/log"
 	"math/big"
@@ -82,6 +84,13 @@ func GoodKeyRSA(key rsa.PublicKey, maxKeySize int) (err error) {
 	}
 	if modulusBitLen > maxKeySize {
 		err = fmt.Errorf("Key too large: %d > %d", modulusBitLen, maxKeySize)
+		log.Debug(err.Error())
+		return err
+	}
+	// Check if key matches debian weak key list
+	modHash := sha1.Sum([]byte(key.N.String()))
+	if _, present := debianWeakKeyList[hex.EncodeToString(modHash[15:])]; present {
+		err = fmt.Errorf("Key modulus matches key in debian weak key list")
 		log.Debug(err.Error())
 		return err
 	}
