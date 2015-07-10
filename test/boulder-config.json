@@ -144,6 +144,21 @@
     "password": "password"
   },
 
+  "publisher": {
+    "-uncomment_for_CT_submission-ct": {
+      "logs": [
+        { "uri": "ct.googleapis.com/pilot" },
+        { "uri": "ct.googleapis.com/aviator" },
+        { "uri": "ct.googleapis.com/rocketeer" },
+        { "uri": "ct1.digicert-ct.com/log" },
+        { "uri": "ct.izenpe.com" },
+        { "uri": "log.certly.io" }
+      ],
+      "submissionRetries": 0,
+      "submissionBackoffSeconds": "0s"
+    }
+  },
+
   "common": {
     "baseURL": "http://localhost:4000",
     "issuerCert": "test/test-ca.pem",

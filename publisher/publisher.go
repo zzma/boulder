@@ -17,6 +17,7 @@ import (
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/letsencrypt/boulder/core"
@@ -141,7 +142,7 @@ func (pub PublisherAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
 		var retries int
 		var sct signedCertificateTimestamp
 		for !done && retries <= pub.CT.SubmissionRetries {
-			resp, err := postJSON(&client, ctLog.URI, jsonSubmission, &sct)
+			resp, err := postJSON(&client, fmt.Sprintf("%s%s", ctLog.URI, "/ct/v1/add-chain"), jsonSubmission, &sct)
 			if err != nil {
 				// Retry the request, log the error
 				// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
@@ -203,6 +204,9 @@ func (pub PublisherAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
 }
 
 func postJSON(client *http.Client, uri string, data []byte, respObj interface{}) (*http.Response, error) {
+	if !strings.HasPrefix(uri, "http://") && !strings.HasPrefix(uri, "https://") {
+		uri = fmt.Sprintf("%s%s", "http://", uri)
+	}
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, fmt.Errorf("Creating request failed, %s", err)
