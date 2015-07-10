@@ -13,7 +13,7 @@ import (
 	"github.com/letsencrypt/boulder/test"
 )
 
-func TestVerifySignature(t *testing.T) {
+func TestCheckSignature(t *testing.T) {
 	// Based on a submission to the aviator log
 	goodSigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g==")
 	if err != nil {
@@ -28,8 +28,11 @@ func TestVerifySignature(t *testing.T) {
 	err = testReciept.CheckSignature()
 	test.AssertNotError(t, err, "BAD")
 
-	// Invalid signature
+	// Invalid signature (too short, trailing garbage)
 	testReciept.Signature = goodSigBytes[1:]
+	err = testReciept.CheckSignature()
+	test.AssertError(t, err, "BAD")
+	testReciept.Signature = append(goodSigBytes, []byte{0, 0, 1}...)
 	err = testReciept.CheckSignature()
 	test.AssertError(t, err, "BAD")
 }

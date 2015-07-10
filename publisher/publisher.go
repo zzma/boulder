@@ -23,11 +23,83 @@ import (
 	blog "github.com/letsencrypt/boulder/log"
 )
 
+// CTConfig defines the JSON configuration file schema
+type CTConfig struct {
+	Logs              []logDesc `json:"logs"`
+	SubmissionRetries int       `json:"submissionRetries"`
+	// This should use the same method as the DNS resolver
+	SubmissionBackoffSeconds int `json:"submissionBackoffSeconds"`
+
+	SubmissionBackoff time.Duration `json:"-"`
+	IssuerDER         []byte        `json:"-"`
+}
+
+type logDesc struct {
+	URI    string `json:"uri"`
+	KeyPEM string `json:"keyPEM"`
+}
+
+type ctSubmissionRequest struct {
+	Chain []string `json:"chain"`
+}
+
+type rawSignedCertificateTimestamp struct {
+	Version    uint8  `json:"sct_version"`
+	LogID      string `json:"id"`
+	Timestamp  uint64 `json:"timestamp"`
+	Signature  string `json:"signature"`
+	Extensions string `json:"extensions"`
+}
+
+type signedCertificateTimestamp struct {
+	SCTVersion uint8  // The version of the protocol to which the SCT conforms
+	LogID      []byte // the SHA-256 hash of the log's public key, calculated over
+	// the DER encoding of the key represented as SubjectPublicKeyInfo.
+	Timestamp  uint64 // Timestamp (in ms since unix epoc) at which the SCT was issued
+	Extensions []byte // For future extensions to the protocol
+	Signature  []byte // The Log's signature for this SCT
+}
+
+func (sct *signedCertificateTimestamp) UnmarshalJSON(data []byte) error {
+	var rawSCT rawSignedCertificateTimestamp
+	var err error
+	if err = json.Unmarshal(data, &rawSCT); err != nil {
+		return fmt.Errorf("Failed to unmarshal SCT reciept, %s", err)
+	}
+	sct.LogID, err = base64.StdEncoding.DecodeString(rawSCT.LogID)
+	if err != nil {
+		return fmt.Errorf("Failed to decode log ID, %s", err)
+	}
+	sct.Signature, err = base64.StdEncoding.DecodeString(rawSCT.Signature)
+	if err != nil {
+		return fmt.Errorf("Failed to decode SCT signature, %s", err)
+	}
+	sct.Extensions, err = base64.StdEncoding.DecodeString(rawSCT.Extensions)
+	if err != nil {
+		return fmt.Errorf("Failed to decode SCT extensions, %s", err)
+	}
+
+	sct.SCTVersion = rawSCT.Version
+	sct.Timestamp = rawSCT.Timestamp
+	return nil
+}
+
+const (
+	sctVersion       = 0
+	sctSigType       = 0
+	sctX509EntryType = 0
+	sctHashSHA256    = 4
+	sctSigECDSA      = 3
+)
+
+// PublisherAuthorityImpl defines a Publisher
 type PublisherAuthorityImpl struct {
 	log *blog.AuditLogger
 	CT  *CTConfig
 }
 
+// NewPublisherAuthorityImpl creates a Publisher that will submit certificates
+// to any CT logs configured in CTConfig
 func NewPublisherAuthorityImpl(ctConfig *CTConfig, issuerCert string) (*PublisherAuthorityImpl, error) {
 	var pub PublisherAuthorityImpl
 
@@ -47,32 +119,13 @@ func NewPublisherAuthorityImpl(ctConfig *CTConfig, issuerCert string) (*Publishe
 	return &pub, nil
 }
 
-type ctSubmissionReq struct {
-	Chain []string `json:"chain"`
-}
-
-type CTConfig struct {
-	Logs              []logDesc `json:"logs"`
-	SubmissionRetries int       `json:"submissionRetries"`
-	// This should use the same method as the DNS resolver
-	SubmissionBackoffSeconds int `json:"submissionBackoffSeconds"`
-
-	SubmissionBackoff time.Duration `json:"-"`
-	IssuerDER         []byte        `json:"-"`
-}
-
-type logDesc struct {
-	URI    string `json:"uri"`
-	KeyPEM string `json:"keyPEM"`
-}
-
 // SubmitToCT will submit the certificate represented by certDER to any CT
-// logs configured in pub.CTLogURIs
+// logs configured in pub.CT.Logs
 func (pub PublisherAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
 	if pub.CT == nil {
 		return nil
 	}
-	submission := ctSubmissionReq{Chain: []string{base64.StdEncoding.EncodeToString(cert.Raw), base64.StdEncoding.EncodeToString(pub.CT.IssuerDER)}}
+	submission := ctSubmissionRequest{Chain: []string{base64.StdEncoding.EncodeToString(cert.Raw), base64.StdEncoding.EncodeToString(pub.CT.IssuerDER)}}
 	client := http.Client{}
 	jsonSubmission, err := json.Marshal(submission)
 	if err != nil {
@@ -167,57 +220,8 @@ func postJSON(client *http.Client, uri string, data []byte, respObj interface{})
 	return resp, nil
 }
 
-type rawSignedCertificateTimestamp struct {
-	Version    uint8  `json:"sct_version"`
-	LogID      string `json:"id"`
-	Timestamp  uint64 `json:"timestamp"`
-	Signature  string `json:"signature"`
-	Extensions string `json:"extensions"`
-}
-
-type signedCertificateTimestamp struct {
-	SCTVersion uint8  // The version of the protocol to which the SCT conforms
-	LogID      []byte // the SHA-256 hash of the log's public key, calculated over
-	// the DER encoding of the key represented as SubjectPublicKeyInfo.
-	Timestamp  uint64 // Timestamp (in ms since unix epoc) at which the SCT was issued
-	Extensions []byte // For future extensions to the protocol
-	Signature  []byte // The Log's signature for this SCT
-}
-
-func (sct *signedCertificateTimestamp) UnmarshalJSON(data []byte) error {
-	var rawSCT rawSignedCertificateTimestamp
-	var err error
-	if err = json.Unmarshal(data, &rawSCT); err != nil {
-		return fmt.Errorf("Failed to unmarshal SCT reciept, %s", err)
-	}
-	sct.LogID, err = base64.StdEncoding.DecodeString(rawSCT.LogID)
-	if err != nil {
-		return fmt.Errorf("Failed to decode log ID, %s", err)
-	}
-	sct.Signature, err = base64.StdEncoding.DecodeString(rawSCT.Signature)
-	if err != nil {
-		return fmt.Errorf("Failed to decode SCT signature, %s", err)
-	}
-	sct.Extensions, err = base64.StdEncoding.DecodeString(rawSCT.Extensions)
-	if err != nil {
-		return fmt.Errorf("Failed to decode SCT extensions, %s", err)
-	}
-
-	sct.SCTVersion = rawSCT.Version
-	sct.Timestamp = rawSCT.Timestamp
-	return nil
-}
-
-const (
-	sctVersion       = 0
-	sctSigType       = 0
-	sctX509EntryType = 0
-	sctHashSHA256    = 4
-	sctSigECDSA      = 3
-)
-
 // CheckSignature validates that the returned SCT signature is a valid SHA256 +
-// ECDSA signature but does not verify that a specific public key signed it
+// ECDSA signature but does not verify that a specific public key signed it.
 func (sct *signedCertificateTimestamp) CheckSignature() error {
 	if len(sct.Signature) < 4 {
 		return errors.New("SCT signature is truncated")
