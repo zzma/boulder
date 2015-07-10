@@ -31,7 +31,7 @@ func main() {
 
 		blog.SetAuditLogger(auditlogger)
 
-		issuerDER, err := core.LoadCert(c.Common.IssuerCert)
+		issuer, err := core.LoadCert(c.Common.IssuerCert)
 		cmd.FailOnError(err, "Could not load issuer certificate")
 		pubi, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, issuer.Raw)
 

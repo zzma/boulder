@@ -95,7 +95,9 @@ func main() {
 		ca, err := ca.NewCertificateAuthorityImpl(cadb, c.CA, c.Common.IssuerCert)
 		cmd.FailOnError(err, "Unable to create CA")
 
-		pub, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, c.Common.IssuerCert)
+		issuer, err := core.LoadCert(c.Common.IssuerCert)
+		cmd.FailOnError(err, "Could not load issuer certificate")
+		pub, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, issuer.Raw)
 		cmd.FailOnError(err, "Unable to create Publisher")
 
 		if c.SQL.CreateTables {
