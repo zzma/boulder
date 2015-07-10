@@ -90,6 +90,15 @@
           "expiry": "8760h"
         }
       }
+    },
+    "ct": {
+        "logs": [
+            {
+                "uri": "http://localhost:8080/submit"
+            }
+        ],
+        "submissionRetries": 1,
+        "submissionBackoffSeconds": 5
     }
   },
 
