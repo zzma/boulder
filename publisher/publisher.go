@@ -125,7 +125,10 @@ func (pub PublisherAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
 	if pub.CT == nil {
 		return nil
 	}
-	submission := ctSubmissionRequest{Chain: []string{base64.StdEncoding.EncodeToString(cert.Raw), base64.StdEncoding.EncodeToString(pub.CT.IssuerDER)}}
+	submission := ctSubmissionRequest{Chain: []string{base64.StdEncoding.EncodeToString(cert.Raw)}}
+	if len(pub.CT.IssuerDER) > 0 {
+		submission.Chain = append(submission.Chain, base64.StdEncoding.EncodeToString(pub.CT.IssuerDER))
+	}
 	client := http.Client{}
 	jsonSubmission, err := json.Marshal(submission)
 	if err != nil {

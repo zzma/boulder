@@ -110,9 +110,8 @@ func logSrv(t *testing.T, stopChan, waitChan chan bool) {
 		if err != nil {
 			return
 		}
-		// There should always be at least 2 certificates in the chain we are
-		// submitting.
-		if len(jsonReq.Chain) > 1 {
+		// Submissions should always contain at least one cert
+		if len(jsonReq.Chain) >= 1 {
 			fmt.Fprint(w, `{"signature":"BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g=="}`)
 		}
 	})
@@ -155,15 +154,15 @@ func TestCheckSignature(t *testing.T) {
 
 	// Good signature
 	err = testReciept.CheckSignature()
-	test.AssertNotError(t, err, "BAD")
+	test.AssertNotError(t, err, "Valid signature check failed")
 
 	// Invalid signature (too short, trailing garbage)
 	testReciept.Signature = goodSigBytes[1:]
 	err = testReciept.CheckSignature()
-	test.AssertError(t, err, "BAD")
+	test.AssertError(t, err, "Invalid signature check failed")
 	testReciept.Signature = append(goodSigBytes, []byte{0, 0, 1}...)
 	err = testReciept.CheckSignature()
-	test.AssertError(t, err, "BAD")
+	test.AssertError(t, err, "Invalid signature check failed")
 }
 
 func TestSubmitToCT(t *testing.T) {
@@ -183,6 +182,11 @@ func TestSubmitToCT(t *testing.T) {
 	leaf, err := x509.ParseCertificate(leafPEM.Bytes)
 	test.AssertNotError(t, err, "Couldn't parse leafPEM.Bytes")
 
+	err = pub.SubmitToCT(leaf)
+	test.AssertNotError(t, err, "Certificate submission failed")
+
+	// No Intermediate
+	pub.CT.IssuerDER = []byte{}
 	err = pub.SubmitToCT(leaf)
 	test.AssertNotError(t, err, "Certificate submission failed")
 }
