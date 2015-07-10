@@ -126,14 +126,14 @@
   },
 
   "publisher": {
-    "ct": {
+    "-uncomment_for_CT_submission-ct": {
       "logs": [
         {
-          "uri": "http://localhost:8080/submit"
+          "uri": "http://localhost:8080/ct/v1/add-chaint"
         }
       ],
       "submissionRetries": 1,
-      "submissionBackoffSeconds": 5
+      "submissionBackoffSeconds": "5s"
     }
   },
 

@@ -110,8 +110,11 @@ func logSrv(t *testing.T, stopChan, waitChan chan bool) {
 		if err != nil {
 			return
 		}
-		fmt.Println("HI", jsonReq)
-		fmt.Fprint(w, `{"signature":"BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g=="}`)
+		// There should always be at least 2 certificates in the chain we are
+		// submitting.
+		if len(jsonReq.Chain) > 1 {
+			fmt.Fprint(w, `{"signature":"BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g=="}`)
+		}
 	})
 
 	server := &http.Server{Addr: "localhost:8080"}
@@ -128,6 +131,17 @@ func logSrv(t *testing.T, stopChan, waitChan chan bool) {
 
 	waitChan <- true
 	server.Serve(conn)
+}
+
+func TestNewPublisherAuthorityImpl(t *testing.T) {
+	// Allowed
+	ctConf := CTConfig{SubmissionBackoffString: "0s"}
+	_, err := NewPublisherAuthorityImpl(&ctConf, []byte{})
+	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
+
+	ctConf = CTConfig{Logs: []logDesc{logDesc{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}
+	_, err = NewPublisherAuthorityImpl(&ctConf, []byte{})
+	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
 }
 
 func TestCheckSignature(t *testing.T) {
@@ -161,7 +175,7 @@ func TestSubmitToCT(t *testing.T) {
 
 	intermediatePEM, _ := pem.Decode([]byte(testIntermediate))
 
-	pub, err := NewPublisherAuthorityImpl(&CTConfig{Logs: []logDesc{logDesc{URI: "http://localhost:8080/ct/v1/add-chain"}}}, intermediatePEM.Bytes)
+	pub, err := NewPublisherAuthorityImpl(&CTConfig{Logs: []logDesc{logDesc{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}, intermediatePEM.Bytes)
 	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
 
 	leafPEM, _ := pem.Decode([]byte(testLeaf))

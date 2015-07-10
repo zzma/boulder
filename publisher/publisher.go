@@ -28,7 +28,7 @@ type CTConfig struct {
 	Logs              []logDesc `json:"logs"`
 	SubmissionRetries int       `json:"submissionRetries"`
 	// This should use the same method as the DNS resolver
-	SubmissionBackoffSeconds int `json:"submissionBackoffSeconds"`
+	SubmissionBackoffString string `json:"submissionBackoff"`
 
 	SubmissionBackoff time.Duration `json:"-"`
 	IssuerDER         []byte        `json:"-"`
@@ -109,6 +109,11 @@ func NewPublisherAuthorityImpl(ctConfig *CTConfig, issuerDER []byte) (*Publisher
 	if ctConfig != nil {
 		pub.CT = ctConfig
 		pub.CT.IssuerDER = issuerDER
+		ctBackoff, err := time.ParseDuration(ctConfig.SubmissionBackoffString)
+		if err != nil {
+			return nil, err
+		}
+		pub.CT.SubmissionBackoff = ctBackoff
 	}
 
 	return &pub, nil

@@ -33,7 +33,7 @@ func main() {
 
 		issuerDER, err := core.LoadCert(c.Common.IssuerCert)
 		cmd.FailOnError(err, "Could not load issuer certificate")
-		pubi, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, issuerDER)
+		pubi, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, issuer.Raw)
 
 		go cmd.ProfileCmd("Publisher", stats)
 
