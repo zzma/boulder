@@ -7,13 +7,9 @@ package publisher
 
 import (
 	"bytes"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,9 +52,10 @@ type ctSubmissionReq struct {
 }
 
 type CTConfig struct {
-	Logs                     []logDesc `json:"logs"`
-	SubmissionRetries        int       `json:"submissionRetries"`
-	SubmissionBackoffSeconds int       `json:"submissionBackoffSeconds"`
+	Logs              []logDesc `json:"logs"`
+	SubmissionRetries int       `json:"submissionRetries"`
+	// This should use the same method as the DNS resolver
+	SubmissionBackoffSeconds int `json:"submissionBackoffSeconds"`
 
 	SubmissionBackoff time.Duration `json:"-"`
 	IssuerDER         []byte        `json:"-"`
@@ -219,15 +216,14 @@ const (
 	sctSigECDSA      = 3
 )
 
-// Verify verifies the SCT signature returned from a submission against the public
-// key of the log it was submitted to
-// Adapted from https://github.com/agl/certificatetransparency/blob/master/ct.go#L136
-func (sct *signedCertificateTimestamp) Verify(pk crypto.PublicKey, certDER []byte) error {
+// CheckSignature validates that the returned SCT signature is a valid SHA256 +
+// ECDSA signature but does not verify that a specific public key signed it
+func (sct *signedCertificateTimestamp) CheckSignature() error {
 	if len(sct.Signature) < 4 {
-		return errors.New("SCT signature truncated")
+		return errors.New("SCT signature is truncated")
 	}
-	// Since all of the known logs only (currently) use SHA256 hashes and ECDSA
-	// keys, only allow those hashes and signatures
+	// Since all of the known logs currently only use SHA256 hashes and ECDSA
+	// keys, only allow those
 	if sct.Signature[0] != sctHashSHA256 {
 		return fmt.Errorf("Unsupported SCT hash function [%d]", sct.Signature[0])
 	}
@@ -238,6 +234,7 @@ func (sct *signedCertificateTimestamp) Verify(pk crypto.PublicKey, certDER []byt
 	var ecdsaSig struct {
 		R, S *big.Int
 	}
+	// Ignore the two length bytes and attempt to unmarshal the signature directly
 	signatureBytes := sct.Signature[4:]
 	signatureBytes, err := asn1.Unmarshal(signatureBytes, &ecdsaSig)
 	if err != nil {
@@ -245,56 +242,6 @@ func (sct *signedCertificateTimestamp) Verify(pk crypto.PublicKey, certDER []byt
 	}
 	if len(signatureBytes) > 0 {
 		return fmt.Errorf("Trailing garbage after signature")
-	}
-
-	signed := make([]byte, 1+1+8+1+3+len(certDER)+2+len(sct.Extensions))
-	x := signed
-	// Write the log version
-	x[0] = sctVersion
-	// Write the signature type
-	x[1] = sctSigType
-	x = x[2:]
-
-	// Write the timestamp
-	binary.BigEndian.PutUint64(x, sct.Timestamp)
-	x = x[8:]
-
-	// Write the entry type
-	x[0] = sctX509EntryType
-	x = x[1:]
-
-	// Write leaf length (?)
-	binary.BigEndian.PutUint16(x, uint16(len(certDER)))
-	x = x[3:]
-
-	// Write leaf
-	copy(x, certDER)
-	x = x[len(certDER):]
-
-	// Write extensions length (?)
-	binary.BigEndian.PutUint16(x, uint16(len(sct.Extensions)))
-	x = x[2:]
-
-	// Write extensions
-	copy(x, sct.Extensions)
-	x = x[len(sct.Extensions):]
-
-	h := sha256.New()
-	h.Write(signed)
-	digest := h.Sum(nil)
-	fmt.Println(digest, ecdsaSig)
-
-	switch t := pk.(type) {
-	case ecdsa.PublicKey:
-		if !ecdsa.Verify(&t, digest, ecdsaSig.R, ecdsaSig.S) {
-			return fmt.Errorf("Failed to verify SCT signature using log ECDSA public key")
-		}
-	case *ecdsa.PublicKey:
-		if !ecdsa.Verify(t, digest, ecdsaSig.R, ecdsaSig.S) {
-			return fmt.Errorf("Failed to verify SCT signature using log ECDSA public key")
-		}
-	default:
-		return fmt.Errorf("Log uses unsupported key type")
 	}
 
 	return nil
