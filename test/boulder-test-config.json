@@ -22,6 +22,10 @@
     "CA": {
       "client": "CA.client",
       "server": "CA.server"
+    },
+    "Publisher": {
+      "client": "Publisher.client",
+      "server": "Publisher.server"
     }
   },
 
@@ -95,15 +99,6 @@
           "expiry": "8760h"
         }
       }
-    },
-    "ct": {
-        "logs": [
-            {
-                "uri": "http://localhost:8080/submit"
-            }
-        ],
-        "submissionRetries": 1,
-        "submissionBackoffSeconds": 5
     }
   },
 
@@ -128,6 +123,18 @@
     "port": "25",
     "username": "cert-master@example.com",
     "password": "password"
+  },
+
+  "publisher": {
+    "ct": {
+      "logs": [
+        {
+          "uri": "http://localhost:8080/submit"
+        }
+      ],
+      "submissionRetries": 1,
+      "submissionBackoffSeconds": 5
+    }
   },
 
   "common": {

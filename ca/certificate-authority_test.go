@@ -19,6 +19,7 @@ import (
 	ocspConfig "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cloudflare/cfssl/ocsp/config"
 	_ "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/mattn/go-sqlite3"
 	"github.com/letsencrypt/boulder/mocks"
+	"github.com/letsencrypt/boulder/publisher"
 
 	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/sa"
@@ -414,6 +415,7 @@ func TestRevoke(t *testing.T) {
 	if err != nil {
 		return
 	}
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 
@@ -442,6 +444,7 @@ func TestIssueCertificate(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
 	test.AssertNotError(t, err, "Failed to create CA")
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 
@@ -518,6 +521,7 @@ func TestRejectNoName(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
 	test.AssertNotError(t, err, "Failed to create CA")
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 
@@ -534,6 +538,7 @@ func TestRejectTooManyNames(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
 	test.AssertNotError(t, err, "Failed to create CA")
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 
 	// Test that the CA rejects a CSR with too many names
@@ -547,6 +552,7 @@ func TestDeduplication(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
 	test.AssertNotError(t, err, "Failed to create CA")
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 
@@ -576,6 +582,7 @@ func TestRejectValidityTooLong(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
 	test.AssertNotError(t, err, "Failed to create CA")
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 
@@ -596,6 +603,7 @@ func TestRejectValidityTooLong(t *testing.T) {
 func TestShortKey(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 
@@ -609,6 +617,7 @@ func TestShortKey(t *testing.T) {
 func TestRejectBadAlgorithm(t *testing.T) {
 	cadb, storageAuthority, caConfig := setup(t)
 	ca, err := NewCertificateAuthorityImpl(cadb, caConfig, caCertFile)
+	ca.Publisher, _ = publisher.NewPublisherAuthorityImpl(nil, "")
 	ca.SA = storageAuthority
 	ca.MaxKeySize = 4096
 

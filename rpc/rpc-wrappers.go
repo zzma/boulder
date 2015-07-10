@@ -58,6 +58,7 @@ const (
 	MethodFinalizeAuthorization       = "FinalizeAuthorization"       // SA
 	MethodAddCertificate              = "AddCertificate"              // SA
 	MethodAlreadyDeniedCSR            = "AlreadyDeniedCSR"            // SA
+	MethodSubmitToCT                  = "SubmitToCT"                  // CA
 )
 
 // Request structs
@@ -501,6 +502,39 @@ func (vac ValidationAuthorityClient) CheckCAARecords(ident core.AcmeIdentifier) 
 	}
 	present = caaResp.Present
 	valid = caaResp.Valid
+	return
+}
+
+func NewPublisherAuthorityServer(rpc RPCServer, impl core.PublisherAuthority) (err error) {
+	rpc.Handle(MethodSubmitToCT, func(req []byte) (response []byte, err error) {
+		cert, err := x509.ParseCertificate(req)
+		if err != nil {
+			// AUDIT[ Improper Messages ] 0786b6f2-91ca-4f48-9883-842a19084c64
+			improperMessage(MethodIssueCertificate, err, req)
+			return
+		}
+
+		err = impl.SubmitToCT(cert)
+		return
+	})
+
+	return nil
+}
+
+// PublisherAuthorityClient is a client to communicate with the Publisher Authority
+type PublisherAuthorityClient struct {
+	rpc RPCClient
+}
+
+// NewPublisherAuthorityClient constructs an RPC client
+func NewPublisherAuthorityClient(client RPCClient) (pub PublisherAuthorityClient, err error) {
+	pub = PublisherAuthorityClient{rpc: client}
+	return
+}
+
+// SubmitToCT sends a request to submit a certifcate to CT logs
+func (pub PublisherAuthorityClient) SubmitToCT(cert *x509.Certificate) (err error) {
+	_, err = pub.rpc.DispatchSync(MethodSubmitToCT, cert.Raw)
 	return
 }
 

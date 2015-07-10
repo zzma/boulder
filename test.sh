@@ -12,6 +12,7 @@ TESTDIRS="analysis \
           core \
           log \
           policy \
+          publisher \
           ra \
           rpc \
           sa \

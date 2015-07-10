@@ -38,6 +38,7 @@ def start():
     run('./cmd/boulder-sa')
     run('./cmd/boulder-ca')
     run('./cmd/boulder-va')
+    run('./cmd/boulder-publisher')
 
 def run_node_test():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

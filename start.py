@@ -37,7 +37,8 @@ def start():
         run('./cmd/boulder-ra'),
         run('./cmd/boulder-sa'),
         run('./cmd/boulder-ca'),
-        run('./cmd/boulder-va')]
+        run('./cmd/boulder-va'),
+        run('./cmd/boulder-publisher')]
     time.sleep(100000)
 
 try:

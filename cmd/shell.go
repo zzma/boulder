@@ -40,6 +40,7 @@ import (
 	"github.com/letsencrypt/boulder/ca"
 	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"
+	"github.com/letsencrypt/boulder/publisher"
 	"github.com/letsencrypt/boulder/rpc"
 )
 
@@ -51,13 +52,14 @@ import (
 type Config struct {
 	// General
 	AMQP struct {
-		Server string
-		RA     Queue
-		VA     Queue
-		SA     Queue
-		CA     Queue
-		OCSP   Queue
-		TLS    *TLSConfig
+		Server    string
+		RA        Queue
+		VA        Queue
+		SA        Queue
+		CA        Queue
+		OCSP      Queue
+		Publisher Queue
+		TLS       *TLSConfig
 	}
 
 	WFE struct {
@@ -118,6 +120,10 @@ type Config struct {
 		DBName          string
 		MinTimeToExpiry string
 		ResponseLimit   int
+	}
+
+	Publisher struct {
+		CT *publisher.CTConfig
 	}
 
 	Common struct {
@@ -233,7 +239,7 @@ func AmqpChannel(conf Config) (*amqp.Channel, error) {
 		if conf.AMQP.TLS.CertFile != nil || conf.AMQP.TLS.KeyFile != nil {
 			// But they have to give both.
 			if conf.AMQP.TLS.CertFile == nil || conf.AMQP.TLS.KeyFile == nil {
-				err = fmt.Errorf("AMQPS: You must set both of the configuration values AMQP.TLS.KeyFile and AMQP.TLS.CertFile.")
+				err = fmt.Errorf("AMQPS: You must set both of the configuration values AMQP.TLS.KeyFile and AMQP.TLS.CertFile")
 				return nil, err
 			}
 

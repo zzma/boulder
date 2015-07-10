@@ -26,6 +26,7 @@ import (
 	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/mocks"
 	"github.com/letsencrypt/boulder/policy"
+	"github.com/letsencrypt/boulder/publisher"
 	"github.com/letsencrypt/boulder/sa"
 	"github.com/letsencrypt/boulder/test"
 )
@@ -175,12 +176,14 @@ func initAuthorities(t *testing.T) (core.CertificateAuthority, *DummyValidationA
 	ocspSigner, _ := ocsp.NewSigner(caCert, caCert, caKey, time.Hour)
 	pa := policy.NewPolicyAuthorityImpl()
 	cadb, _ := mocks.NewMockCertificateAuthorityDatabase()
+	pub, _ := publisher.NewPublisherAuthorityImpl(nil, "")
 	ca := ca.CertificateAuthorityImpl{
 		Signer:         signer,
 		OCSPSigner:     ocspSigner,
 		SA:             sa,
 		PA:             pa,
 		DB:             cadb,
+		Publisher:      pub,
 		ValidityPeriod: time.Hour * 2190,
 		NotAfter:       time.Now().Add(time.Hour * 8761),
 		MaxKeySize:     4096,

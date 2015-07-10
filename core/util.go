@@ -19,13 +19,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/square/go-jose"
-	blog "github.com/letsencrypt/boulder/log"
 	"hash"
 	"io"
+	"io/ioutil"
 	"math/big"
 	"net/url"
 	"strings"
+
+	"github.com/cloudflare/cfssl/helpers"
+	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/square/go-jose"
+	blog "github.com/letsencrypt/boulder/log"
 )
 
 // Package Variables Variables
@@ -330,5 +333,19 @@ func UniqueNames(names []string) (unique []string) {
 	for name := range nameMap {
 		unique = append(unique, name)
 	}
+	return
+}
+
+// LoadCert loads a PEM certificate specified by filename or returns a error
+func LoadCert(filename string) (issuerCert *x509.Certificate, err error) {
+	if filename == "" {
+		err = errors.New("Issuer certificate was not provided in config.")
+		return
+	}
+	issuerCertPEM, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	issuerCert, err = helpers.ParseCertificatePEM(issuerCertPEM)
 	return
 }

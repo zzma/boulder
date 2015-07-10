@@ -147,3 +147,8 @@ type DNSResolver interface {
 	LookupCNAME(string) (string, error)
 	LookupCAA(string, bool) ([]*dns.CAA, error)
 }
+
+// PublisherAuthority defines the public interface for the Boulder Publisher
+type PublisherAuthority interface {
+	SubmitToCT(*x509.Certificate) error
+}

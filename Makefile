@@ -11,6 +11,7 @@ OBJECTS = activity-monitor \
 	boulder-sa \
 	boulder-va \
 	boulder-wfe \
+	boulder-publisher \
 	ocsp-updater \
 	ocsp-responder
 

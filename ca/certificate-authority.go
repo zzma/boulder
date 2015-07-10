@@ -6,22 +6,13 @@
 package ca
 
 import (
-	"bytes"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/asn1"
-	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"math/big"
-	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/letsencrypt/boulder/core"
@@ -53,23 +44,6 @@ type Config struct {
 	// The maximum number of subjectAltNames in a single certificate
 	MaxNames int
 	CFSSL    cfsslConfig.Config
-	// CT Logs to submit certificates to and maximum number of times to attempt
-	// to submit the certificates (per log)
-	CT *ctConfig
-}
-
-type ctConfig struct {
-	Logs                     []logDesc `json:"logs"`
-	SubmissionRetries        int       `json:"submissionRetries"`
-	SubmissionBackoffSeconds int       `json:"submissionBackoffSeconds"`
-
-	SubmissionBackoff time.Duration `json:"-"`
-	IssuerDER         []byte        `json:"-"`
-}
-
-type logDesc struct {
-	URI    string `json:"uri"`
-	KeyPEM string `json:"keyPEM"`
 }
 
 // KeyConfig should contain either a File path to a PEM-format private key,
@@ -112,13 +86,13 @@ type CertificateAuthorityImpl struct {
 	SA             core.StorageAuthority
 	PA             core.PolicyAuthority
 	DB             core.CertificateAuthorityDatabase
+	Publisher      core.PublisherAuthority
 	log            *blog.AuditLogger
 	Prefix         int // Prepended to the serial number
 	ValidityPeriod time.Duration
 	NotAfter       time.Time
 	MaxNames       int
 	MaxKeySize     int
-	CT             *ctConfig
 }
 
 // NewCertificateAuthorityImpl creates a CA that talks to a remote CFSSL
@@ -155,7 +129,7 @@ func NewCertificateAuthorityImpl(cadb core.CertificateAuthorityDatabase, config 
 		return nil, err
 	}
 
-	issuer, err := loadIssuer(issuerCert)
+	issuer, err := core.LoadCert(issuerCert)
 	if err != nil {
 		return nil, err
 	}
@@ -201,14 +175,6 @@ func NewCertificateAuthorityImpl(cadb core.CertificateAuthorityDatabase, config 
 		return nil, err
 	}
 
-	if config.CT != nil {
-		ca.CT = config.CT
-		ca.CT.IssuerDER = issuer.Raw
-		ca.CT.SubmissionBackoff = time.Second * time.Duration(ca.CT.SubmissionBackoffSeconds)
-
-		fmt.Printf("CA CONFIG CT %+v\n", ca.CT)
-	}
-
 	ca.MaxNames = config.MaxNames
 
 	return ca, nil
@@ -229,19 +195,6 @@ func loadKey(keyConfig KeyConfig) (priv crypto.Signer, err error) {
 	pkcs11Config := keyConfig.PKCS11
 	priv, err = pkcs11key.New(pkcs11Config.Module,
 		pkcs11Config.Token, pkcs11Config.PIN, pkcs11Config.Label)
-	return
-}
-
-func loadIssuer(filename string) (issuerCert *x509.Certificate, err error) {
-	if filename == "" {
-		err = errors.New("Issuer certificate was not provided in config.")
-		return
-	}
-	issuerCertPEM, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return
-	}
-	issuerCert, err = helpers.ParseCertificatePEM(issuerCertPEM)
 	return
 }
 
@@ -511,225 +464,9 @@ func (ca *CertificateAuthorityImpl) IssueCertificate(csr x509.CertificateRequest
 	}
 
 	// Submit the certificate to any configured CT logs
-	go ca.SubmitToCT(certObj)
+	go ca.Publisher.SubmitToCT(certObj)
 
 	// Do not return an err at this point; caller must know that the Certificate
 	// was issued. (Also, it should be impossible for err to be non-nil here)
 	return cert, nil
-}
-
-type ctSubmissionReq struct {
-	Chain []string `json:"chain"`
-}
-
-// SubmitToCT will submit the certificate represented by certDER to any CT
-// logs configured in ca.CTLogURIs
-func (ca *CertificateAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
-	if ca.CT != nil {
-		submission := ctSubmissionReq{Chain: []string{base64.StdEncoding.EncodeToString(cert.Raw), base64.StdEncoding.EncodeToString(ca.CT.IssuerDER)}}
-		client := http.Client{}
-		jsonSubmission, err := json.Marshal(submission)
-		if err != nil {
-			ca.log.Err(fmt.Sprintf("Unable to marshal CT submission, %s", err))
-			return err
-		}
-
-		for _, ctLog := range ca.CT.Logs {
-			done := false
-			var retries int
-			var sct signedCertificateTimestamp
-			for !done && retries <= ca.CT.SubmissionRetries {
-				resp, err := postJSON(&client, ctLog.URI, jsonSubmission, &sct)
-				if err != nil {
-					// Retry the request, log the error
-					// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-					ca.log.AuditErr(fmt.Errorf("Error POSTing JSON to CT log submission endpoint [%s]: %s", ctLog.URI, err))
-					if retries >= ca.CT.SubmissionRetries {
-						break
-					}
-					retries++
-					time.Sleep(ca.CT.SubmissionBackoff)
-					continue
-				} else {
-					if resp.StatusCode == http.StatusRequestTimeout || resp.StatusCode == http.StatusServiceUnavailable {
-						// Retry the request after either 10 seconds or the period specified
-						// by the Retry-After header
-						backoff := ca.CT.SubmissionBackoff
-						if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-							if seconds, err := strconv.Atoi(retryAfter); err != nil {
-								backoff = time.Second * time.Duration(seconds)
-							}
-						}
-						if retries >= ca.CT.SubmissionRetries {
-							break
-						}
-						retries++
-						time.Sleep(backoff)
-						continue
-					} else if resp.StatusCode != http.StatusOK {
-						// Not something we expect to happen, set error, break loop and log
-						// the error
-						// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-						ca.log.AuditErr(fmt.Errorf("Unexpected status code returned from CT log submission endpoint [%s]: Unexpected status code [%d]", ctLog.URI, resp.StatusCode))
-						break
-					}
-				}
-
-				done = true
-				break
-			}
-			if !done {
-				ca.log.Warning(fmt.Sprintf("Unable to submit certificate to CT log [Serial: %s, Log URI: %s, Retries: %d]", core.SerialToString(cert.SerialNumber), ctLog.URI, retries))
-				return nil
-			}
-
-			// Do something with the signedCertificateTimestamp, we might want to
-			// include something in the CertificateStatus table or such to indicate
-			// that it has been successfully submitted to CT logs so that we can retry
-			// sometime in the future if it didn't work this time. (In the future this
-			// will be needed anyway for putting SCT in OCSP responses)
-
-			ca.log.Notice(fmt.Sprintf("Submitted certificate to CT log [Serial: %s, Log URI: %s, Retries: %d]", core.SerialToString(cert.SerialNumber), ctLog.URI, retries))
-		}
-	}
-
-	return nil
-}
-
-func postJSON(client *http.Client, uri string, data []byte, respObj interface{}) (*http.Response, error) {
-	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(data))
-	if err != nil {
-		return nil, fmt.Errorf("Creating request failed, %s", err)
-	}
-	req.Header.Set("Keep-Alive", "timeout=15, max=100")
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("Request failed, %s", err)
-	}
-
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to read response body, %s", err)
-	}
-
-	err = json.Unmarshal(body, respObj)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to unmarshal SCT reciept, %s", err)
-	}
-
-	return resp, nil
-}
-
-type rawSignedCertificateTimestamp struct {
-	Version    uint8  `json:"sct_version"`
-	LogID      string `json:"id"`
-	Timestamp  uint64 `json:"timestamp"`
-	Extensions string `json:"extensions"`
-	Signature  string `json:"signature"`
-}
-
-type signedCertificateTimestamp struct {
-	SCTVersion uint8  // The version of the protocol to which the SCT conforms
-	LogID      []byte // the SHA-256 hash of the log's public key, calculated over
-	// the DER encoding of the key represented as SubjectPublicKeyInfo.
-	Timestamp  uint64 // Timestamp (in ms since unix epoc) at which the SCT was issued
-	Extensions []byte // For future extensions to the protocol
-	Signature  []byte // The Log's signature for this SCT
-}
-
-func (sct *signedCertificateTimestamp) UnmarshalJSON(data []byte) error {
-	var rawSCT rawSignedCertificateTimestamp
-	var err error
-	if err = json.Unmarshal(data, &rawSCT); err != nil {
-		return fmt.Errorf("Failed to unmarshal SCT reciept, %s", err)
-	}
-	sct.LogID, err = base64.StdEncoding.DecodeString(rawSCT.LogID)
-	if err != nil {
-		return fmt.Errorf("Failed to decode log ID, %s", err)
-	}
-	sct.Signature, err = base64.StdEncoding.DecodeString(rawSCT.Signature)
-	if err != nil {
-		return fmt.Errorf("Failed to decode SCT signature, %s", err)
-	}
-	sct.Extensions, err = base64.StdEncoding.DecodeString(rawSCT.Extensions)
-	if err != nil {
-		return fmt.Errorf("Failed to decode SCT extensions, %s", err)
-	}
-
-	sct.SCTVersion = rawSCT.Version
-	sct.Timestamp = rawSCT.Timestamp
-	return nil
-}
-
-const (
-	sctVersion       = 0
-	sctSigType       = 0
-	sctX509EntryType = 0
-	sctHashSHA256    = 4
-	sctSigECDSA      = 3
-)
-
-// Verify verifies the SCT signature returned from a submission against the public
-// key of the log it was submitted to
-// Adapted from https://github.com/agl/certificatetransparency/blob/master/ct.go#L136
-func (sct *signedCertificateTimestamp) Verify(pk crypto.PublicKey, cert *x509.Certificate) error {
-	if len(sct.Signature) < 4 {
-		return errors.New("SCT signature truncated")
-	}
-	// Since all of the known logs only (currently) use SHA256 hashes and ECDSA
-	// keys, only allow those hashes and signatures
-	if sct.Signature[0] != sctHashSHA256 {
-		return fmt.Errorf("Unsupported SCT hash function [%d]", sct.Signature[0])
-	}
-	if sct.Signature[1] != sctSigECDSA {
-		return fmt.Errorf("Unsupported SCT signature algorithm [%d]", sct.Signature[1])
-	}
-
-	var ecdsaSig struct {
-		R, S *big.Int
-	}
-
-	signatureBytes := sct.Signature[4:]
-	signatureBytes, err := asn1.Unmarshal(signatureBytes, &ecdsaSig)
-	if err != nil {
-		return fmt.Errorf("Failed to parse SCT signature, %s", err)
-	}
-	if len(signatureBytes) > 0 {
-		return fmt.Errorf("Trailing garbage after signature")
-	}
-
-	signed := make([]byte, 1+1+8+1+len(cert.Raw)+len(sct.Extensions))
-	x := signed
-	x[0] = sctVersion
-	x[1] = sctSigType
-	x = x[2:]
-	binary.BigEndian.PutUint64(x, sct.Timestamp)
-	x = x[8:]
-	x[0] = sctX509EntryType
-	x = x[1:]
-	x = cert.Raw[:]
-	x = x[len(cert.Raw):]
-	x = sct.Extensions[:]
-
-	h := sha256.New()
-	h.Write(signed)
-	digest := h.Sum(nil)
-
-	switch t := pk.(type) {
-	case ecdsa.PublicKey:
-		if !ecdsa.Verify(&t, digest, ecdsaSig.R, ecdsaSig.S) {
-			return fmt.Errorf("Failed to verify SCT signature using log ECDSA public key")
-		}
-	case *ecdsa.PublicKey:
-		if !ecdsa.Verify(t, digest, ecdsaSig.R, ecdsaSig.S) {
-			return fmt.Errorf("Failed to verify SCT signature using log ECDSA public key")
-		}
-	default:
-		return fmt.Errorf("Log uses unsupported key type")
-	}
-
-	return nil
 }

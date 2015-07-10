@@ -17,6 +17,7 @@ import (
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"
+	"github.com/letsencrypt/boulder/publisher"
 	"github.com/letsencrypt/boulder/ra"
 	"github.com/letsencrypt/boulder/sa"
 	"github.com/letsencrypt/boulder/va"
@@ -94,6 +95,9 @@ func main() {
 		ca, err := ca.NewCertificateAuthorityImpl(cadb, c.CA, c.Common.IssuerCert)
 		cmd.FailOnError(err, "Unable to create CA")
 
+		pub, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, c.Common.IssuerCert)
+		cmd.FailOnError(err, "Unable to create Publisher")
+
 		if c.SQL.CreateTables {
 			err = sa.CreateTablesIfNotExists()
 			cmd.FailOnError(err, "Failed to create SA tables")
@@ -116,6 +120,7 @@ func main() {
 		ra.VA = &va
 		va.RA = &ra
 		ca.SA = sa
+		ca.Publisher = pub
 
 		// Set up paths
 		ra.AuthzBase = c.Common.BaseURL + wfe.AuthzPath
