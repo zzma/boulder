@@ -35,8 +35,7 @@ type CTConfig struct {
 }
 
 type logDesc struct {
-	URI    string `json:"uri"`
-	KeyPEM string `json:"keyPEM"`
+	URI string `json:"uri"`
 }
 
 type ctSubmissionRequest struct {
@@ -100,7 +99,7 @@ type PublisherAuthorityImpl struct {
 
 // NewPublisherAuthorityImpl creates a Publisher that will submit certificates
 // to any CT logs configured in CTConfig
-func NewPublisherAuthorityImpl(ctConfig *CTConfig, issuerCert string) (*PublisherAuthorityImpl, error) {
+func NewPublisherAuthorityImpl(ctConfig *CTConfig, issuerDER []byte) (*PublisherAuthorityImpl, error) {
 	var pub PublisherAuthorityImpl
 
 	logger := blog.GetAuditLogger()
@@ -109,11 +108,7 @@ func NewPublisherAuthorityImpl(ctConfig *CTConfig, issuerCert string) (*Publishe
 
 	if ctConfig != nil {
 		pub.CT = ctConfig
-		issuer, err := core.LoadCert(issuerCert)
-		if err != nil {
-			return nil, err
-		}
-		pub.CT.IssuerDER = issuer.Raw
+		pub.CT.IssuerDER = issuerDER
 	}
 
 	return &pub, nil
@@ -179,7 +174,13 @@ func (pub PublisherAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
 		}
 		if !done {
 			pub.log.Warning(fmt.Sprintf("Unable to submit certificate to CT log [Serial: %s, Log URI: %s, Retries: %d]", core.SerialToString(cert.SerialNumber), ctLog.URI, retries))
-			return nil
+			return fmt.Errorf("Unable to submit certificate")
+		}
+
+		if err = sct.CheckSignature(); err != nil {
+			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+			pub.log.AuditErr(err)
+			return err
 		}
 
 		// Do something with the signedCertificateTimestamp, we might want to
@@ -205,8 +206,8 @@ func postJSON(client *http.Client, uri string, data []byte, respObj interface{})
 	if err != nil {
 		return nil, fmt.Errorf("Request failed, %s", err)
 	}
-
 	defer resp.Body.Close()
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read response body, %s", err)

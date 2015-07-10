@@ -8,6 +8,7 @@ package main
 import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/streadway/amqp"
+	"github.com/letsencrypt/boulder/core"
 
 	"github.com/letsencrypt/boulder/cmd"
 	blog "github.com/letsencrypt/boulder/log"
@@ -30,7 +31,9 @@ func main() {
 
 		blog.SetAuditLogger(auditlogger)
 
-		pubi, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, c.Common.IssuerCert)
+		issuerDER, err := core.LoadCert(c.Common.IssuerCert)
+		cmd.FailOnError(err, "Could not load issuer certificate")
+		pubi, err := publisher.NewPublisherAuthorityImpl(c.Publisher.CT, issuerDER)
 
 		go cmd.ProfileCmd("Publisher", stats)
 
