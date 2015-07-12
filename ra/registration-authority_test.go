@@ -183,7 +183,7 @@ func initAuthorities(t *testing.T) (core.CertificateAuthority, *DummyValidationA
 		SA:             sa,
 		PA:             pa,
 		DB:             cadb,
-		Publisher:      pub,
+		Publisher:      &pub,
 		ValidityPeriod: time.Hour * 2190,
 		NotAfter:       time.Now().Add(time.Hour * 8761),
 		MaxKeySize:     4096,

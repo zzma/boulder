@@ -121,6 +121,7 @@ func main() {
 		ra.SA = sa
 		ra.VA = &va
 		va.RA = &ra
+		pub.SA = sa
 		ca.SA = sa
 		ca.Publisher = pub
 

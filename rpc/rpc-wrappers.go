@@ -58,7 +58,10 @@ const (
 	MethodFinalizeAuthorization       = "FinalizeAuthorization"       // SA
 	MethodAddCertificate              = "AddCertificate"              // SA
 	MethodAlreadyDeniedCSR            = "AlreadyDeniedCSR"            // SA
-	MethodSubmitToCT                  = "SubmitToCT"                  // CA
+	MethodGetSCTReciept               = "GetSCTReciept"               // SA
+	MethodGetSCTReciepts              = "GetSCTReciepts"              // SA
+	MethodAddSCTReciept               = "AddSCTReciept"               // SA
+	MethodSubmitToCT                  = "SubmitToCT"                  // Pub
 )
 
 // Request structs
@@ -930,6 +933,61 @@ func NewStorageAuthorityServer(rpc RPCServer, impl core.StorageAuthority) error 
 		return
 	})
 
+	rpc.Handle(MethodGetSCTReciepts, func(req []byte) (response []byte, err error) {
+		scts, err := impl.GetSCTReciepts(string(req))
+		jsonResponse, err := json.Marshal(scts)
+		if err != nil {
+			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+			errorCondition(MethodGetSCTReciepts, err, req)
+			return
+		}
+
+		return jsonResponse, nil
+	})
+
+	rpc.Handle(MethodGetSCTReciept, func(req []byte) (response []byte, err error) {
+		var gsctReq struct {
+			Serial string
+			LogID  []byte
+		}
+
+		err = json.Unmarshal(req, &gsctReq)
+		if err != nil {
+			// AUDIT[ Improper Messages ] 0786b6f2-91ca-4f48-9883-842a19084c64
+			improperMessage(MethodGetSCTReciept, err, req)
+			return
+		}
+
+		sct, err := impl.GetSCTReciept(gsctReq.Serial, gsctReq.LogID)
+		jsonResponse, err := json.Marshal(core.RPCSignedCertificateTimestamp(*sct))
+		if err != nil {
+			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+			errorCondition(MethodGetSCTReciept, err, req)
+			return
+		}
+
+		return jsonResponse, nil
+	})
+
+	rpc.Handle(MethodAddSCTReciept, func(req []byte) (response []byte, err error) {
+		var sct core.RPCSignedCertificateTimestamp
+		err = json.Unmarshal(req, &sct)
+		if err != nil {
+			// AUDIT[ Improper Messages ] 0786b6f2-91ca-4f48-9883-842a19084c64
+			improperMessage(MethodAddSCTReciept, err, req)
+			return
+		}
+
+		err = impl.AddSCTReciept(core.SignedCertificateTimestamp(sct))
+		if err != nil {
+			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+			errorCondition(MethodGetCertificateByShortSerial, err, req)
+			return
+		}
+
+		return nil, nil
+	})
+
 	return nil
 }
 
@@ -1170,4 +1228,16 @@ func (cac StorageAuthorityClient) AlreadyDeniedCSR(names []string) (exists bool,
 		exists = true
 	}
 	return
+}
+
+func (cac StorageAuthorityClient) GetSCTReciepts(serial string) ([]*core.SignedCertificateTimestamp, error) {
+	return nil, nil
+}
+
+func (cac StorageAuthorityClient) GetSCTReciept(serial string, logID []byte) (*core.SignedCertificateTimestamp, error) {
+	return nil, nil
+}
+
+func (cac StorageAuthorityClient) AddSCTReciept(sct core.SignedCertificateTimestamp) error {
+	return nil
 }

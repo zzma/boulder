@@ -8,11 +8,9 @@ package wfe
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -23,6 +21,7 @@ import (
 	"time"
 
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
+	"github.com/letsencrypt/boulder/mocks"
 
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/square/go-jose"
 	"github.com/letsencrypt/boulder/core"
@@ -33,13 +32,6 @@ import (
 
 const (
 	agreementURL = "http://example.invalid/terms"
-
-	test1KeyPublicJSON = `
-	{
-		"kty":"RSA",
-		"n":"yNWVhtYEKJR21y9xsHV-PD_bYwbXSeNuFal46xYxVfRL5mqha7vttvjB_vc7Xg2RvgCxHPCqoxgMPTzHrZT75LjCwIW2K_klBYN8oYvTwwmeSkAz6ut7ZxPv-nZaT5TJhGk0NT2kh_zSpdriEJ_3vW-mqxYbbBmpvHqsa1_zx9fSuHYctAZJWzxzUZXykbWMWQZpEiE0J4ajj51fInEzVn7VxV-mzfMyboQjujPh7aNJxAWSq4oQEJJDgWwSh9leyoJoPpONHxh5nEE5AjE01FkGICSxjpZsF-w8hOTI3XXohUdu29Se26k2B0PolDSuj0GIQU6-W9TdLXSjBb2SpQ",
-		"e":"AAEAAQ"
-	}`
 
 	test1KeyPrivatePEM = `
 -----BEGIN RSA PRIVATE KEY-----
@@ -70,12 +62,6 @@ snYiqxD9nL7pVqQP2Qbqbn0yD6d3G5/7r86F7Wu2pihM8g6oyMZ3qZvvRIBvKfWo
 eROL1ve1vmQF3kjrMPhhK2kr6qdWnTE5XlPllVSZFQenSTzj98AO
 -----END RSA PRIVATE KEY-----
 `
-
-	test2KeyPublicJSON = `{
-		"kty":"RSA",
-		"n":"qnARLrT7Xz4gRcKyLdydmCr-ey9OuPImX4X40thk3on26FkMznR3fRjs66eLK7mmPcBZ6uOJseURU6wAaZNmemoYx1dMvqvWWIyiQleHSD7Q8vBrhR6uIoO4jAzJZR-ChzZuSDt7iHN-3xUVspu5XGwXU_MVJZshTwp4TaFx5elHIT_ObnTvTOU3Xhish07AbgZKmWsVbXh5s-CrIicU4OexJPgunWZ_YJJueOKmTvnLlTV4MzKR2oZlBKZ27S0-SfdV_QDx_ydle5oMAyKVtlAV35cyPMIsYNwgUGBCdY_2Uzi5eX0lTc7MPRwz6qR1kip-i59VcGcUQgqHV6Fyqw",
-		"e":"AAEAAQ"
-	}`
 
 	test2KeyPrivatePEM = `
 -----BEGIN RSA PRIVATE KEY-----
@@ -123,130 +109,6 @@ wk6Oiadty3eQqSBJv0HnpmiEdQVffIK5Pg4M8Dd+aOBnEkbopAJOuA==
 		"f349efa6d2fadbaf8ed9ba67e5a9b98c3d5a13c06297c4cf36dc76f494e8887e3" +
 		"5dd9c885526136d810fc7640f5ba56281e2b75fa3ff7c91a7d23bab7fd4"
 )
-
-type MockSA struct {
-	// empty
-}
-
-func (sa *MockSA) GetRegistration(id int64) (core.Registration, error) {
-	if id == 100 {
-		// Tag meaning "Missing"
-		return core.Registration{}, errors.New("missing")
-	}
-	if id == 101 {
-		// Tag meaning "Malformed"
-		return core.Registration{}, nil
-	}
-
-	keyJSON := []byte(test1KeyPublicJSON)
-	var parsedKey jose.JsonWebKey
-	parsedKey.UnmarshalJSON(keyJSON)
-
-	return core.Registration{ID: id, Key: parsedKey, Agreement: agreementURL}, nil
-}
-
-func (sa *MockSA) GetRegistrationByKey(jwk jose.JsonWebKey) (core.Registration, error) {
-	var test1KeyPublic jose.JsonWebKey
-	var test2KeyPublic jose.JsonWebKey
-	test1KeyPublic.UnmarshalJSON([]byte(test1KeyPublicJSON))
-	test2KeyPublic.UnmarshalJSON([]byte(test2KeyPublicJSON))
-
-	if core.KeyDigestEquals(jwk, test1KeyPublic) {
-		return core.Registration{ID: 1, Key: jwk, Agreement: agreementURL}, nil
-	}
-
-	if core.KeyDigestEquals(jwk, test2KeyPublic) {
-		// No key found
-		return core.Registration{ID: 2}, sql.ErrNoRows
-	}
-
-	// Return a fake registration
-	return core.Registration{ID: 1, Agreement: agreementURL}, nil
-}
-
-func (sa *MockSA) GetAuthorization(id string) (core.Authorization, error) {
-	if id == "valid" {
-		exp := time.Now().AddDate(100, 0, 0)
-		return core.Authorization{Status: core.StatusValid, RegistrationID: 1, Expires: &exp, Identifier: core.AcmeIdentifier{Type: "dns", Value: "not-an-example.com"}}, nil
-	}
-	return core.Authorization{}, nil
-}
-
-func (sa *MockSA) GetCertificate(serial string) (core.Certificate, error) {
-	// Serial ee == 238.crt
-	if serial == "000000000000000000000000000000ee" {
-		certPemBytes, _ := ioutil.ReadFile("test/238.crt")
-		certBlock, _ := pem.Decode(certPemBytes)
-		return core.Certificate{
-			RegistrationID: 1,
-			DER:            certBlock.Bytes,
-		}, nil
-	} else if serial == "000000000000000000000000000000b2" {
-		certPemBytes, _ := ioutil.ReadFile("test/178.crt")
-		certBlock, _ := pem.Decode(certPemBytes)
-		return core.Certificate{
-			RegistrationID: 1,
-			DER:            certBlock.Bytes,
-		}, nil
-	} else {
-		return core.Certificate{}, errors.New("No cert")
-	}
-}
-
-func (sa *MockSA) GetCertificateByShortSerial(string) (core.Certificate, error) {
-	return core.Certificate{}, nil
-}
-
-func (sa *MockSA) GetCertificateStatus(serial string) (core.CertificateStatus, error) {
-	// Serial ee == 238.crt
-	if serial == "000000000000000000000000000000ee" {
-		return core.CertificateStatus{
-			Status: core.OCSPStatusGood,
-		}, nil
-	} else if serial == "000000000000000000000000000000b2" {
-		return core.CertificateStatus{
-			Status: core.OCSPStatusRevoked,
-		}, nil
-	} else {
-		return core.CertificateStatus{}, errors.New("No cert status")
-	}
-}
-
-func (sa *MockSA) AlreadyDeniedCSR([]string) (bool, error) {
-	return false, nil
-}
-
-func (sa *MockSA) AddCertificate(certDER []byte, regID int64) (digest string, err error) {
-	return
-}
-
-func (sa *MockSA) FinalizeAuthorization(authz core.Authorization) (err error) {
-	return
-}
-
-func (sa *MockSA) MarkCertificateRevoked(serial string, ocspResponse []byte, reasonCode int) (err error) {
-	return
-}
-
-func (sa *MockSA) UpdateOCSP(serial string, ocspResponse []byte) (err error) {
-	return
-}
-
-func (sa *MockSA) NewPendingAuthorization(authz core.Authorization) (output core.Authorization, err error) {
-	return
-}
-
-func (sa *MockSA) NewRegistration(reg core.Registration) (regR core.Registration, err error) {
-	return
-}
-
-func (sa *MockSA) UpdatePendingAuthorization(authz core.Authorization) (err error) {
-	return
-}
-
-func (sa *MockSA) UpdateRegistration(reg core.Registration) (err error) {
-	return
-}
 
 type MockRegistrationAuthority struct{}
 
@@ -397,9 +259,9 @@ func TestIssueCertificate(t *testing.T) {
 
 	// TODO: Use a mock RA so we can test various conditions of authorized, not authorized, etc.
 	ra := ra.NewRegistrationAuthorityImpl()
-	ra.SA = &MockSA{}
+	ra.SA = &mocks.MockSA{}
 	ra.CA = &MockCA{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.RA = &ra
 	wfe.Stats, _ = statsd.NewNoopClient()
 	responseWriter := httptest.NewRecorder()
@@ -525,7 +387,7 @@ func TestChallenge(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	responseWriter := httptest.NewRecorder()
 
 	var key jose.JsonWebKey
@@ -575,7 +437,7 @@ func TestNewRegistration(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.Stats, _ = statsd.NewNoopClient()
 	wfe.SubscriberAgreementURL = agreementURL
 	responseWriter := httptest.NewRecorder()
@@ -735,7 +597,7 @@ func TestRevokeCertificate(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.Stats, _ = statsd.NewNoopClient()
 	wfe.SubscriberAgreementURL = agreementURL
 	responseWriter := httptest.NewRecorder()
@@ -796,7 +658,7 @@ func TestRevokeCertificateAlreadyRevoked(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.Stats, _ = statsd.NewNoopClient()
 	wfe.SubscriberAgreementURL = agreementURL
 	responseWriter := httptest.NewRecorder()
@@ -817,7 +679,7 @@ func TestAuthorization(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.Stats, _ = statsd.NewNoopClient()
 	responseWriter := httptest.NewRecorder()
 
@@ -900,7 +762,7 @@ func TestRegistration(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.Stats, _ = statsd.NewNoopClient()
 	wfe.SubscriberAgreementURL = agreementURL
 	responseWriter := httptest.NewRecorder()
@@ -1005,7 +867,7 @@ func TestTermsRedirect(t *testing.T) {
 	wfe := setupWFE(t)
 
 	wfe.RA = &MockRegistrationAuthority{}
-	wfe.SA = &MockSA{}
+	wfe.SA = &mocks.MockSA{}
 	wfe.Stats, _ = statsd.NewNoopClient()
 	wfe.SubscriberAgreementURL = agreementURL
 

@@ -6,8 +6,10 @@
 package sa
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -540,4 +542,56 @@ func (ssa *SQLStorageAuthority) AlreadyDeniedCSR(names []string) (already bool, 
 	}
 
 	return
+}
+
+// GetSCTReciepts gets all of the SCT reciepts for a given certificate serial
+func (ssa *SQLStorageAuthority) GetSCTReciepts(serial string) (reciepts []*core.SignedCertificateTimestamp, err error) {
+	recieptObjs, err := ssa.dbMap.Select(
+		&core.SignedCertificateTimestamp{},
+		"SELECT * FROM sctReciepts WHERE serial = :serial",
+		map[string]interface{}{"serial": serial},
+	)
+	if err != nil {
+		return
+	}
+	if len(recieptObjs) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	for _, recieptObj := range recieptObjs {
+		reciept := recieptObj.(*core.SignedCertificateTimestamp)
+		reciepts = append(reciepts, reciept)
+	}
+	return
+}
+
+// GetSCTReciept gets a specific SCT reciept for a given certificate serial and
+// CT log ID
+func (ssa *SQLStorageAuthority) GetSCTReciept(serial string, logID []byte) (*core.SignedCertificateTimestamp, error) {
+	// TODO(rolandshoemaker): This could be a better query
+	reciepts, err := ssa.GetSCTReciepts(serial)
+	if err != nil {
+		return nil, err
+	}
+	for _, reciept := range reciepts {
+		if bytes.Compare(reciept.LogID, logID) == 0 {
+			return reciept, nil
+		}
+	}
+
+	return nil, sql.ErrNoRows
+}
+
+// AddSCTReciept adds a new SCT reciept to the (append-only) sctReciepts table
+func (ssa *SQLStorageAuthority) AddSCTReciept(sct core.SignedCertificateTimestamp) error {
+	tx, err := ssa.dbMap.Begin()
+	if err != nil {
+		return err
+	}
+	err = tx.Insert(&sct)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	err = tx.Commit()
+	return err
 }

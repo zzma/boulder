@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/letsencrypt/boulder/core"
+	"github.com/letsencrypt/boulder/mocks"
 	"github.com/letsencrypt/boulder/test"
 )
 
@@ -138,7 +140,7 @@ func TestNewPublisherAuthorityImpl(t *testing.T) {
 	_, err := NewPublisherAuthorityImpl(&ctConf, []byte{})
 	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
 
-	ctConf = CTConfig{Logs: []logDesc{logDesc{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}
+	ctConf = CTConfig{Logs: []logDescription{logDescription{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}
 	_, err = NewPublisherAuthorityImpl(&ctConf, []byte{})
 	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
 }
@@ -148,7 +150,7 @@ func TestCheckSignature(t *testing.T) {
 	goodSigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g==")
 	test.AssertNotError(t, err, "Couldn't decode signature")
 
-	testReciept := signedCertificateTimestamp{
+	testReciept := core.SignedCertificateTimestamp{
 		Signature: goodSigBytes,
 	}
 
@@ -174,7 +176,8 @@ func TestSubmitToCT(t *testing.T) {
 
 	intermediatePEM, _ := pem.Decode([]byte(testIntermediate))
 
-	pub, err := NewPublisherAuthorityImpl(&CTConfig{Logs: []logDesc{logDesc{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}, intermediatePEM.Bytes)
+	pub, err := NewPublisherAuthorityImpl(&CTConfig{Logs: []logDescription{logDescription{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}, intermediatePEM.Bytes)
+	pub.SA = &mocks.MockSA{}
 	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
 
 	leafPEM, _ := pem.Decode([]byte(testLeaf))

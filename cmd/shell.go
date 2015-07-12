@@ -123,7 +123,9 @@ type Config struct {
 	}
 
 	Publisher struct {
-		CT *publisher.CTConfig
+		DBDriver string
+		DBName   string
+		CT       *publisher.CTConfig
 	}
 
 	Common struct {

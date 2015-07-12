@@ -8,9 +8,9 @@ package main
 import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/streadway/amqp"
-	"github.com/letsencrypt/boulder/core"
 
 	"github.com/letsencrypt/boulder/cmd"
+	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"
 	"github.com/letsencrypt/boulder/publisher"
 	"github.com/letsencrypt/boulder/rpc"
@@ -43,9 +43,17 @@ func main() {
 
 			closeChan := ch.NotifyClose(make(chan *amqp.Error, 1))
 
+			saRPC, err := rpc.NewAmqpRPCClient("Publisher->SA", c.AMQP.SA.Server, ch)
+			cmd.FailOnError(err, "Unable to create SA RPC client")
+
+			sac, err := rpc.NewStorageAuthorityClient(saRPC)
+			cmd.FailOnError(err, "Unable to create SA client")
+
+			pubi.SA = &sac
+
 			pubs := rpc.NewAmqpRPCServer(c.AMQP.Publisher.Server, ch)
 
-			err = rpc.NewPublisherAuthorityServer(pubs, pubi)
+			err = rpc.NewPublisherAuthorityServer(pubs, &pubi)
 			cmd.FailOnError(err, "Could not create Publisher RPC server")
 
 			auditlogger.Info(app.VersionString())
