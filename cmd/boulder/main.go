@@ -123,7 +123,7 @@ func main() {
 		va.RA = &ra
 		pub.SA = sa
 		ca.SA = sa
-		ca.Publisher = pub
+		ca.Publisher = &pub
 
 		// Set up paths
 		ra.AuthzBase = c.Common.BaseURL + wfe.AuthzPath
