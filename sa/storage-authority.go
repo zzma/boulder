@@ -548,7 +548,7 @@ func (ssa *SQLStorageAuthority) AlreadyDeniedCSR(names []string) (already bool, 
 func (ssa *SQLStorageAuthority) GetSCTReciepts(serial string) (reciepts []*core.SignedCertificateTimestamp, err error) {
 	recieptObjs, err := ssa.dbMap.Select(
 		&core.SignedCertificateTimestamp{},
-		"SELECT * FROM sctReciepts WHERE serial = :serial",
+		"SELECT * FROM sctReciepts WHERE certificateSerial = :serial",
 		map[string]interface{}{"serial": serial},
 	)
 	if err != nil {

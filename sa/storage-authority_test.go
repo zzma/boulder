@@ -6,21 +6,24 @@
 package sa
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
 
+	"io/ioutil"
+	"testing"
+
 	_ "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/mattn/go-sqlite3"
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/square/go-jose"
 	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/test"
-	"io/ioutil"
-	"testing"
 )
 
 func initSA(t *testing.T) *SQLStorageAuthority {
@@ -207,4 +210,108 @@ func TestDeniedCSR(t *testing.T) {
 	exists, err := sa.AlreadyDeniedCSR(append(csr.DNSNames, csr.Subject.CommonName))
 	test.AssertNotError(t, err, "AlreadyDeniedCSR failed")
 	test.Assert(t, !exists, "Found non-existent CSR")
+}
+
+const (
+	sctVersion    = 0
+	sctTimestamp  = 1435787268907
+	sctLogID      = "aPaY+B9kgr46jO65KB1M/HFRXWeT1ETRCmesu09P+8Q="
+	sctSignature  = "BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g=="
+	sctCertSerial = "ff000000000000012607e11a78ac01f9"
+)
+
+func TestAddSCTReciept(t *testing.T) {
+	logBytes, err := base64.StdEncoding.DecodeString(sctLogID)
+	test.AssertNotError(t, err, "Failed to decode log ID")
+	sigBytes, err := base64.StdEncoding.DecodeString(sctSignature)
+	test.AssertNotError(t, err, "Failed to decode SCT signature")
+	sct := core.SignedCertificateTimestamp{
+		SCTVersion:        sctVersion,
+		LogID:             logBytes,
+		Timestamp:         sctTimestamp,
+		Signature:         sigBytes,
+		CertificateSerial: sctCertSerial,
+	}
+	sa := initSA(t)
+	err = sa.AddSCTReciept(sct)
+	test.AssertNotError(t, err, "Failed to add SCT reciept")
+	// Append only and unique on signature and across LogID and CertificateSerial
+	err = sa.AddSCTReciept(sct)
+	test.AssertError(t, err, "Incorrectly added duplicate SCT reciept")
+}
+
+func TestGetSCTReciept(t *testing.T) {
+	logBytes, err := base64.StdEncoding.DecodeString(sctLogID)
+	test.AssertNotError(t, err, "Failed to decode log ID")
+	sigBytes, err := base64.StdEncoding.DecodeString(sctSignature)
+	test.AssertNotError(t, err, "Failed to decode SCT signature")
+	sct := core.SignedCertificateTimestamp{
+		SCTVersion:        sctVersion,
+		LogID:             logBytes,
+		Timestamp:         sctTimestamp,
+		Signature:         sigBytes,
+		CertificateSerial: sctCertSerial,
+	}
+	sa := initSA(t)
+	err = sa.AddSCTReciept(sct)
+	test.AssertNotError(t, err, "Failed to add SCT reciept")
+
+	sqlSCT, err := sa.GetSCTReciept(sctCertSerial, logBytes)
+	test.AssertNotError(t, err, "Failed to get existing SCT reciept")
+	test.Assert(t, sqlSCT.SCTVersion == sct.SCTVersion, "Invalid SCT version")
+	test.Assert(t, bytes.Compare(sqlSCT.LogID, sct.LogID) == 0, "Invalid log ID")
+	test.Assert(t, sqlSCT.Timestamp == sct.Timestamp, "Invalid timestamp")
+	test.Assert(t, bytes.Compare(sqlSCT.Signature, sct.Signature) == 0, "Invalid signature")
+	test.Assert(t, sqlSCT.CertificateSerial == sct.CertificateSerial, "Invalid certificate serial")
+}
+
+func TestGetSCTReciepts(t *testing.T) {
+	logBytes, err := base64.StdEncoding.DecodeString(sctLogID)
+	test.AssertNotError(t, err, "Failed to decode log ID")
+	sigBytes, err := base64.StdEncoding.DecodeString(sctSignature)
+	test.AssertNotError(t, err, "Failed to decode SCT signature")
+	secondLogBytes, err := base64.StdEncoding.DecodeString(sctLogID)
+	test.AssertNotError(t, err, "Failed to decode log ID")
+	secondSigBytes, err := base64.StdEncoding.DecodeString(sctSignature)
+	test.AssertNotError(t, err, "Failed to decode SCT signature")
+	sct := core.SignedCertificateTimestamp{
+		SCTVersion:        sctVersion,
+		LogID:             logBytes,
+		Timestamp:         sctTimestamp,
+		Signature:         sigBytes,
+		CertificateSerial: sctCertSerial,
+	}
+	sa := initSA(t)
+	err = sa.AddSCTReciept(sct)
+	test.AssertNotError(t, err, "Failed to add SCT reciept")
+
+	secondSCT := core.SignedCertificateTimestamp{
+		SCTVersion:        sctVersion,
+		LogID:             secondLogBytes,
+		Timestamp:         sctTimestamp,
+		Signature:         secondSigBytes,
+		CertificateSerial: sctCertSerial,
+	}
+
+	secondSCT.LogID[0] = 0
+	secondSCT.Signature[0] = 0
+	err = sa.AddSCTReciept(secondSCT)
+	test.AssertNotError(t, err, "Failed to add second SCT reciept")
+
+	sqlSCTs, err := sa.GetSCTReciepts(sctCertSerial)
+	test.AssertNotError(t, err, "Failed to retrieve multiple recipets")
+	test.Assert(t, len(sqlSCTs) == 2, "Incorect number of SCTs returned")
+	fmt.Println(sct.LogID, sqlSCTs[0].LogID)
+
+	test.Assert(t, sqlSCTs[0].SCTVersion == sct.SCTVersion, "Invalid SCT version for first reciept")
+	test.Assert(t, bytes.Compare(sqlSCTs[0].LogID, sct.LogID) == 0, "Invalid log ID for first reciept")
+	test.Assert(t, sqlSCTs[0].Timestamp == sct.Timestamp, "Invalid timestamp for first reciept")
+	test.Assert(t, bytes.Compare(sqlSCTs[0].Signature, sct.Signature) == 0, "Invalid signature for first reciept")
+	test.Assert(t, sqlSCTs[0].CertificateSerial == sct.CertificateSerial, "Invalid certificate serial for first reciept")
+
+	test.Assert(t, sqlSCTs[1].SCTVersion == sct.SCTVersion, "Invalid SCT version for second reciept")
+	test.Assert(t, bytes.Compare(sqlSCTs[1].LogID, secondSCT.LogID) == 0, "Invalid log ID for second reciept")
+	test.Assert(t, sqlSCTs[1].Timestamp == sct.Timestamp, "Invalid timestamp for second reciept")
+	test.Assert(t, bytes.Compare(sqlSCTs[1].Signature, secondSCT.Signature) == 0, "Invalid signature for second reciept")
+	test.Assert(t, sqlSCTs[1].CertificateSerial == sct.CertificateSerial, "Invalid certificate serial for second reciept")
 }
