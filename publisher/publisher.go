@@ -190,7 +190,7 @@ func (pub *PublisherAuthorityImpl) SubmitToCT(cert *x509.Certificate) error {
 			return fmt.Errorf("Unable to submit certificate")
 		}
 
-		if err = sct.CheckSignature(); err != nil {
+		if err = sct.VerifySignature(cert.Raw, ctLog.PublicKey); err != nil {
 			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
 			pub.log.AuditErr(err)
 			return err

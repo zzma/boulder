@@ -6,9 +6,12 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -661,13 +664,16 @@ func (sct *SignedCertificateTimestamp) UnmarshalJSON(data []byte) error {
 }
 
 const (
-	sctHashSHA256 = 4
-	sctSigECDSA   = 3
+	sctVersion       = 0
+	sctSigType       = 0
+	sctHashSHA256    = 4
+	sctSigECDSA      = 3
+	sctX509EntryType = uint16(0)
 )
 
-// CheckSignature validates that the returned SCT signature is a valid SHA256 +
+// VerifySignature validates that the returned SCT signature is a valid SHA256 +
 // ECDSA signature but does not verify that a specific public key signed it.
-func (sct *SignedCertificateTimestamp) CheckSignature() error {
+func (sct *SignedCertificateTimestamp) VerifySignature(leafDER []byte, pk *ecdsa.PublicKey) error {
 	if len(sct.Signature) < 4 {
 		return errors.New("SCT signature is truncated")
 	}
@@ -691,6 +697,47 @@ func (sct *SignedCertificateTimestamp) CheckSignature() error {
 	}
 	if len(signatureBytes) > 0 {
 		return fmt.Errorf("Trailing garbage after signature")
+	}
+
+	signed := make([]byte, 1+1+8+2+3+len(leafDER)+2+len(sct.Extensions))
+	x := signed
+	// Write the log version (1 byte)
+	x[0] = sctVersion
+	// Write the signature type (1 byte)
+	x[1] = sctSigType
+	x = x[2:]
+
+	// Write the timestamp (max 8 bytes)
+	binary.BigEndian.PutUint64(x, sct.Timestamp)
+	x = x[8:]
+
+	// Write the entry type (max 2 bytes)
+	binary.BigEndian.PutUint16(x, sctX509EntryType)
+	x = x[2:]
+
+	// Write leaf length (max 3 bytes)
+	binary.BigEndian.PutUint16(x, uint16(len(leafDER)))
+	x = x[3:]
+
+	// Write leaf
+	copy(x, leafDER)
+	x = x[len(leafDER):]
+
+	// Write extensions length (max 2 bytes)
+	binary.BigEndian.PutUint16(x, uint16(len(sct.Extensions)))
+	x = x[2:]
+
+	// Write extensions
+	copy(x, sct.Extensions)
+	x = x[len(sct.Extensions):]
+
+	// Generate hash
+	h := sha256.New()
+	h.Write(signed)
+	digest := h.Sum(nil)
+
+	if !ecdsa.Verify(pk, digest, ecdsaSig.R, ecdsaSig.S) {
+		return fmt.Errorf("Failed to verify SCT signature using log public key")
 	}
 
 	return nil
