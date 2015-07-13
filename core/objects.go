@@ -613,16 +613,16 @@ type OCSPSigningRequest struct {
 
 type SignedCertificateTimestamp struct {
 	// The version of the protocol to which the SCT conforms
-	SCTVersion uint8 `db:"sctVersion",json:"rpcSCTVersion"`
+	SCTVersion uint8 `db:"sctVersion"`
 	// the SHA-256 hash of the log's public key, calculated over
 	// the DER encoding of the key represented as SubjectPublicKeyInfo.
-	LogID []byte `db:"logID",json:"rpcLogID"`
+	LogID []byte `db:"logID"`
 	// Timestamp (in ms since unix epoc) at which the SCT was issued
-	Timestamp uint64 `db:"timestamp",json:"rpcTimestamp"`
+	Timestamp uint64 `db:"timestamp"`
 	// For future extensions to the protocol
-	Extensions []byte `db:"extensions",json:"rpcExtensions"`
+	Extensions []byte `db:"extensions"`
 	// The Log's signature for this SCT
-	Signature []byte `db:"signature",json:"rpcSignature"`
+	Signature []byte `db:"signature"`
 
 	// The serial of the certificate this SCT is for
 	CertificateSerial string `db:"certificateSerial"`
@@ -717,19 +717,15 @@ func (sct *SignedCertificateTimestamp) VerifySignature(leafDER []byte, pk *ecdsa
 
 	// Write leaf length (max 3 bytes)
 	binary.BigEndian.PutUint16(x, uint16(len(leafDER)))
-	x = x[3:]
-
 	// Write leaf
 	copy(x, leafDER)
-	x = x[len(leafDER):]
+	x = x[3+len(leafDER):]
 
 	// Write extensions length (max 2 bytes)
 	binary.BigEndian.PutUint16(x, uint16(len(sct.Extensions)))
-	x = x[2:]
-
 	// Write extensions
 	copy(x, sct.Extensions)
-	x = x[len(sct.Extensions):]
+	x = x[2+len(sct.Extensions):]
 
 	// Generate hash
 	h := sha256.New()

@@ -175,7 +175,7 @@
         }
       ],
       "submissionRetries": 0,
-      "submissionBackoffSeconds": "0s"
+      "submissionBackoff": "0s"
     }
   },
 

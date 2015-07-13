@@ -62,6 +62,7 @@ func (logDesc *logDescription) UnmarshalJSON(data []byte) error {
 	// Generate key hash for log ID
 	pkHash := sha256.Sum256(pkBytes)
 	logDesc.ID = pkHash[:]
+	fmt.Println(logDesc.ID)
 	if len(logDesc.ID) != 32 {
 		return fmt.Errorf("Invalid log ID length [%d]", len(logDesc.ID))
 	}

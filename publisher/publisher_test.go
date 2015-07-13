@@ -6,6 +6,7 @@
 package publisher
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -115,7 +116,7 @@ func logSrv(t *testing.T, stopChan, waitChan chan bool) {
 		}
 		// Submissions should always contain at least one cert
 		if len(jsonReq.Chain) >= 1 {
-			fmt.Fprint(w, `{"signature":"BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g=="}`)
+			fmt.Fprint(w, `{"signature":"BAMASDBGAiEAknaySJVdB3FqG9bUKHgyu7V9AdEabpTc71BELUp6/iECIQDObrkwlQq6Azfj5XOA5E12G/qy/WuRn97z7qMSXXc82Q=="}`)
 		}
 	})
 
@@ -136,74 +137,38 @@ func logSrv(t *testing.T, stopChan, waitChan chan bool) {
 }
 
 func TestNewPublisherAuthorityImpl(t *testing.T) {
-	// Allowed
-	ctConf := CTConfig{SubmissionBackoffString: "0s"}
-	_, err := NewPublisherAuthorityImpl(&ctConf, []byte{})
+	configJSON := `{"dbDriver":"sqlite3","dbName":":memory:","logs":[{"uri":"localhost:8080","key":"MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1/TMabLkDpCjiupacAlP7xNi0I1JYP8bQFAHDG1xhtolSY1l4QgNRzRrvSe8liE+NPWHdjGxfx3JhTsN9x8/6Q=="}],"submissionBackoff":"0s"}`
+	var ctConf CTConfig
+	err := json.Unmarshal([]byte(configJSON), &ctConf)
+	test.AssertNotError(t, err, "Couldn't unmarshal configuation")
+	pub, err := NewPublisherAuthorityImpl(&ctConf, []byte{})
 	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
-
-	ctConf = CTConfig{Logs: []logDescription{logDescription{URI: "http://localhost:8080/ct/v1/add-chain"}}, SubmissionBackoffString: "0s"}
-	_, err = NewPublisherAuthorityImpl(&ctConf, []byte{})
-	test.AssertNotError(t, err, "Couldn't create new PublisherAuthority")
+	test.Assert(t, len(pub.CT.Logs) == 1, "Incorrect number of logs returned")
+	logBytes, err := base64.StdEncoding.DecodeString("aPaY+B9kgr46jO65KB1M/HFRXWeT1ETRCmesu09P+8Q=")
+	test.AssertNotError(t, err, "Unable to parse log ID")
+	test.Assert(t, bytes.Compare(pub.CT.Logs[0].ID, logBytes) == 0, "Log IDs don't match")
 }
-
-// func TestCheckSignature(t *testing.T) {
-// 	// Based on a submission to the aviator log
-// 	goodSigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g==")
-// 	test.AssertNotError(t, err, "Couldn't decode signature")
-//
-// 	testReciept := core.SignedCertificateTimestamp{
-// 		Signature: goodSigBytes,
-// 	}
-//
-// 	// Good signature
-// 	err = testReciept.CheckSignature()
-// 	test.AssertNotError(t, err, "Valid signature check failed")
-//
-// 	// Invalid signature (too short, trailing garbage)
-// 	testReciept.Signature = goodSigBytes[1:]
-// 	err = testReciept.CheckSignature()
-// 	test.AssertError(t, err, "Invalid signature check failed")
-// 	testReciept.Signature = append(goodSigBytes, []byte{0, 0, 1}...)
-// 	err = testReciept.CheckSignature()
-// 	test.AssertError(t, err, "Invalid signature check failed")
-// }
 
 func TestVerifySignature(t *testing.T) {
 	// Based on an actual submission to the aviator log
-	sigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEA/4kz9wQq3NhvZ6VlOmjq2Z9MVHGrUjF8uxUG9n1uRc4CIQD2FYnnszKXrR9AP5kBWmTgh3fXy+VlHK8HZXfbzdFf7g==")
+	sigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEAknaySJVdB3FqG9bUKHgyu7V9AdEabpTc71BELUp6/iECIQDObrkwlQq6Azfj5XOA5E12G/qy/WuRn97z7qMSXXc82Q==")
 	if err != nil {
-		fmt.Println("a", err)
 		return
 	}
 	testReciept := core.SignedCertificateTimestamp{
 		SCTVersion: sctVersion,
-		Timestamp:  1435787268907,
+		Timestamp:  1423696705756,
 		Signature:  sigBytes,
 	}
 
 	aviatorPkBytes, err := base64.StdEncoding.DecodeString("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1/TMabLkDpCjiupacAlP7xNi0I1JYP8bQFAHDG1xhtolSY1l4QgNRzRrvSe8liE+NPWHdjGxfx3JhTsN9x8/6Q==")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
+	test.AssertNotError(t, err, "Couldn't parse aviator public key")
 	aviatorPk, err := x509.ParsePKIXPublicKey(aviatorPkBytes)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
+	test.AssertNotError(t, err, "Couldn't parse aviator public key bytes")
 	leafPEM, _ := pem.Decode([]byte(testLeaf))
-
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
 	pk := aviatorPk.(*ecdsa.PublicKey)
-
 	err = testReciept.VerifySignature(leafPEM.Bytes, pk)
-	test.AssertNotError(t, err, "BAD")
+	test.AssertNotError(t, err, "Signature validation failed")
 }
 
 func TestSubmitToCT(t *testing.T) {
