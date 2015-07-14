@@ -178,7 +178,7 @@ go install ./Godeps/_workspace/src/github.com/mattn/go-sqlite3
 if [ "${TRAVIS}" == "true" ] ; then
   # Run each test by itself for Travis, so we can get coverage
   for dir in ${TESTDIRS}; do
-    run go test -tags pkcs11 -covermode=count -coverprofile=${dir}.coverprofile ./${dir}/
+    run go test -tags pkcs11 -race -covermode=count -coverprofile=${dir}.coverprofile ./${dir}/
   done
 
   # Gather all the coverprofiles
@@ -196,7 +196,7 @@ else
     dirlist="${dirlist} ./${dir}/"
   done
 
-  run go test -tags pkcs11 ${dirlist}
+  run go test $GOTESTFLAGS -tags pkcs11 ${dirlist}
 fi
 
 # If the unittests failed, exit before trying to run the integration test.
