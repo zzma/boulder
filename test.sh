@@ -175,7 +175,7 @@ end_context #test/gofmt
 # Ensure SQLite is installed so we don't recompile it each time
 go install ./Godeps/_workspace/src/github.com/mattn/go-sqlite3
 
-if [ "${TRAVIS}" == "true" ] || [ "${SKIP_UNIT_TESTS}" == "1" ] ; then
+if [ "${TRAVIS}" == "true" ] || [ "${SKIP_UNIT_TESTS}" != "1" ] ; then
   # Run each test by itself for Travis, so we can get coverage
   for dir in ${TESTDIRS}; do
     run go test -tags pkcs11 -race -covermode=count -coverprofile=${dir}.coverprofile ./${dir}/
@@ -199,7 +199,7 @@ else
   run go test $GOTESTFLAGS -tags pkcs11 ${dirlist}
 fi
 
-if ["${SKIP_UNIT_TESTS}" == "1"]; then
+if [ "${SKIP_UNIT_TESTS}" = "1" ]; then
   echo "Skipping unit tests."
 fi
 
