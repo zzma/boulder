@@ -36,9 +36,8 @@ class ProcInfo:
 def run(path):
     global processes
     binary = os.path.join(tempdir, os.path.basename(path))
-    # The GORACE env variable says that, on first race detected, to exit with
-    # status code 5
-    cmd = 'GORACE="exitcode=5 halt_on_error=1" go build -tags pkcs11 -race -o %s %s' % (binary, path)
+    # The GORACE env variable tells the process to exit on first race detected
+    cmd = 'GORACE="halt_on_error=1" go build -tags pkcs11 -race -o %s %s' % (binary, path)
     print(cmd)
     if subprocess.Popen(cmd, shell=True).wait() != 0:
         die(ExitStatus.Error)
