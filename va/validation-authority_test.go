@@ -65,6 +65,7 @@ const pathWrongToken = "wrongtoken"
 const path404 = "404"
 const pathFound = "302"
 const pathMoved = "301"
+const pathRedirectLookup = "re-lookup"
 
 func createValidation(token string, enableTLS bool) string {
 	payload, _ := json.Marshal(map[string]interface{}{
@@ -87,27 +88,30 @@ func simpleSrv(t *testing.T, token string, stopChan, waitChan chan bool, enableT
 		if r.Host != "localhost" {
 			t.Errorf("Bad Host header: " + r.Host)
 		}
-		if strings.HasSuffix(r.URL.Path, path404) {
+		if strings.HasSuffix(r.URL.Token, path404) {
 			t.Logf("SIMPLESRV: Got a 404 req\n")
 			http.NotFound(w, r)
-		} else if strings.HasSuffix(r.URL.Path, pathMoved) {
+		} else if strings.HasSuffix(r.URL.Token, pathMoved) {
 			t.Logf("SIMPLESRV: Got a 301 redirect req\n")
 			if currentToken == defaultToken {
 				currentToken = pathMoved
 			}
 			http.Redirect(w, r, "valid", 301)
-		} else if strings.HasSuffix(r.URL.Path, pathFound) {
+		} else if strings.HasSuffix(r.URL.Token, pathFound) {
 			t.Logf("SIMPLESRV: Got a 302 redirect req\n")
 			if currentToken == defaultToken {
 				currentToken = pathFound
 			}
 			http.Redirect(w, r, pathMoved, 302)
-		} else if strings.HasSuffix(r.URL.Path, "wait") {
+		} else if strings.HasSuffix(r.URL.Token, "wait") {
 			t.Logf("SIMPLESRV: Got a wait req\n")
 			time.Sleep(time.Second * 3)
-		} else if strings.HasSuffix(r.URL.Path, "wait-long") {
+		} else if strings.HasSuffix(r.URL.Token, "wait-long") {
 			t.Logf("SIMPLESRV: Got a wait-long req\n")
 			time.Sleep(time.Second * 10)
+		} else if strings.HasSuffix(r.URL.Token, "re-lookup") {
+			t.Logf("SIMPLESRV: Got a redirect to invalid lookup req\n")
+			http.Redirect(w, r, "http://invalid.super/path", 302)
 		} else {
 			t.Logf("SIMPLESRV: Got a valid req\n")
 			fmt.Fprintf(w, "%s", createValidation(currentToken, enableTLS))
@@ -285,8 +289,34 @@ func TestSimpleHttp(t *testing.T) {
 	test.AssertEquals(t, len(log.GetAllMatching(`^\[AUDIT\] `)), 1)
 
 	log.Clear()
+	chall.Token = pathMoved
+	finChall, err = va.validateSimpleHTTP(ident, chall)
+	test.AssertEquals(t, finChall.Status, core.StatusValid)
+	test.AssertNotError(t, err, chall.Token)
+	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/301" to ".*/valid"`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost: \[127.0.0.1\]`)), 2)
+
+	log.Clear()
+	chall.Token = pathFound
+	finChall, err = va.validateSimpleHTTP(ident, chall)
+	test.AssertEquals(t, finChall.Status, core.StatusValid)
+	test.AssertNotError(t, err, chall.Token)
+	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/302" to ".*/301"`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/301" to ".*/valid"`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost: \[127.0.0.1\]`)), 3)
+
+	log.Clear()
+	chall.Token = pathRedirectLookup
+	finChall, err = va.validateSimpleHTTP(ident, chall)
+	test.AssertEquals(t, finChall.Status, core.StatusInvalid)
+	test.AssertError(t, err, chall.Token)
+	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/re-lookup" to ".*invalid.super/path"`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost: \[127.0.0.1\]`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`Could not resolve invalid.super`)), 1)
+
+	log.Clear()
 	chall.Token = path404
-	invalidChall, err = va.validateSimpleHTTP(ident, chall, AccountKey)
+	invalidChall, err = va.validateSimpleHTTP(ident, chall)
 	test.AssertEquals(t, invalidChall.Status, core.StatusInvalid)
 	test.AssertError(t, err, "Should have found a 404 for the challenge.")
 	test.AssertEquals(t, invalidChall.Error.Type, core.UnauthorizedProblem)

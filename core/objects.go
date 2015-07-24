@@ -253,8 +253,11 @@ type Challenge struct {
 	// Used by dns and dvsni challenges
 	Validation *jose.JsonWebSignature `json:"validation,omitempty"`
 
-	// IP addresses resolved from authorization identifier
+	// IP addresses resolved from authorization identifier during SimpleHTTP validation
 	ResolvedAddrs []net.IP `json:"resolvedAddrs,omitempty"`
+
+	// URLs redirected to during SimpleHTTP validation
+	Redirects []string `json:"redirects,omitempty"`
 }
 
 // IsSane checks the sanity of a challenge object before issued to the client
