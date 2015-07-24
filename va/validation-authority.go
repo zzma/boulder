@@ -133,12 +133,13 @@ func (va ValidationAuthorityImpl) validateSimpleHTTP(identifier core.AcmeIdentif
 	}
 	hostName := identifier.Value
 
-	addr, problem := va.getFirstAddr(identifier.Value)
+	addr, addrs, problem := va.getFirstAddr(identifier.Value)
 	if problem != nil {
 		challenge.Status = core.StatusInvalid
 		challenge.Error = problem
 		return challenge, challenge.Error
 	}
+	challenge.ResolvedAddrs = addrs
 
 	var scheme string
 	if input.TLS == nil || (input.TLS != nil && *input.TLS) {
@@ -285,7 +286,7 @@ func (va ValidationAuthorityImpl) validateSimpleHTTP(identifier core.AcmeIdentif
 	return challenge, nil
 }
 
-func (va ValidationAuthorityImpl) getFirstAddr(hostname string) (address net.IP, problem *core.ProblemDetails) {
+func (va ValidationAuthorityImpl) getFirstAddr(hostname string) (addr net.IP, addrs []net.IP, problem *core.ProblemDetails) {
 	addrs, _, _, err := va.DNSResolver.LookupHost(hostname)
 	if err != nil {
 		problem = problemDetailsFromDNSError(err)
@@ -299,7 +300,8 @@ func (va ValidationAuthorityImpl) getFirstAddr(hostname string) (address net.IP,
 		}
 		return
 	}
-	address = addrs[0]
+	va.log.Info(fmt.Sprintf("Resolved addresses for %s: %s", hostname, addrs))
+	addr = addrs[0]
 	return
 }
 
@@ -341,12 +343,13 @@ func (va ValidationAuthorityImpl) validateDvsni(identifier core.AcmeIdentifier, 
 	Z := hex.EncodeToString(h.Sum(nil))
 	ZName := fmt.Sprintf("%s.%s.%s", Z[:32], Z[32:], core.DVSNISuffix)
 
-	addr, problem := va.getFirstAddr(identifier.Value)
+	addr, addrs, problem := va.getFirstAddr(identifier.Value)
 	if problem != nil {
 		challenge.Status = core.StatusInvalid
 		challenge.Error = problem
 		return challenge, challenge.Error
 	}
+	challenge.ResolvedAddrs = addrs
 
 	// Make a connection with SNI = nonceName
 	var hostPort string
