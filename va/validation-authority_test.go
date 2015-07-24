@@ -66,6 +66,7 @@ const path404 = "404"
 const pathFound = "302"
 const pathMoved = "301"
 const pathRedirectLookup = "re-lookup"
+const pathRedirectLookupInvalid = "re-lookup-invalid"
 
 func createValidation(token string, enableTLS bool) string {
 	payload, _ := json.Marshal(map[string]interface{}{
@@ -85,7 +86,7 @@ func simpleSrv(t *testing.T, token string, stopChan, waitChan chan bool, enableT
 	currentToken := defaultToken
 
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Host != "localhost" {
+		if r.Host != "localhost" && r.Host != "localhost2" {
 			t.Errorf("Bad Host header: " + r.Host)
 		}
 		if strings.HasSuffix(r.URL.Token, path404) {
@@ -110,6 +111,9 @@ func simpleSrv(t *testing.T, token string, stopChan, waitChan chan bool, enableT
 			t.Logf("SIMPLESRV: Got a wait-long req\n")
 			time.Sleep(time.Second * 10)
 		} else if strings.HasSuffix(r.URL.Token, "re-lookup") {
+			t.Logf("SIMPLESRV: Got a redirect to invalid lookup req\n")
+			http.Redirect(w, r, "http://localhost2/path", 302)
+		} else if strings.HasSuffix(r.URL.Path, "re-lookup-invalid") {
 			t.Logf("SIMPLESRV: Got a redirect to invalid lookup req\n")
 			http.Redirect(w, r, "http://invalid.super/path", 302)
 		} else {
@@ -306,16 +310,25 @@ func TestSimpleHttp(t *testing.T) {
 	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost: \[127.0.0.1\]`)), 3)
 
 	log.Clear()
-	chall.Token = pathRedirectLookup
+	chall.Path = pathRedirectLookupInvalid
 	finChall, err = va.validateSimpleHTTP(ident, chall)
 	test.AssertEquals(t, finChall.Status, core.StatusInvalid)
-	test.AssertError(t, err, chall.Token)
-	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/re-lookup" to ".*invalid.super/path"`)), 1)
+	test.AssertError(t, err, chall.Path)
+	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/re-lookup-invalid" to ".*invalid.super/path"`)), 1)
 	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost: \[127.0.0.1\]`)), 1)
 	test.AssertEquals(t, len(log.GetAllMatching(`Could not resolve invalid.super`)), 1)
 
 	log.Clear()
-	chall.Token = path404
+	chall.Token = pathRedirectLookup
+	finChall, err = va.validateSimpleHTTP(ident, chall)
+	test.AssertEquals(t, finChall.Status, core.StatusValid)
+	test.AssertNotError(t, err, chall.Path)
+	test.AssertEquals(t, len(log.GetAllMatching(`redirect from ".*/re-lookup" to ".*localhost2/path"`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost: \[127.0.0.1\]`)), 1)
+	test.AssertEquals(t, len(log.GetAllMatching(`Resolved addresses for localhost2: \[127.0.0.1\]`)), 1)
+
+	log.Clear()
+	chall.Path = path404
 	invalidChall, err = va.validateSimpleHTTP(ident, chall)
 	test.AssertEquals(t, invalidChall.Status, core.StatusInvalid)
 	test.AssertError(t, err, "Should have found a 404 for the challenge.")
