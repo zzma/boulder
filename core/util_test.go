@@ -105,7 +105,7 @@ func TestGenerateKey(t *testing.T) {
 	ck, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	test.AssertNotError(t, err, "Couldn't generate temporary client key")
 	jwk := &jose.JsonWebKey{Key: ck.PublicKey}
-	r := Recovery{Client: jwk, Length: 65}
+	r := Recovery{Client: jwk, Length: 32}
 	_, err = r.GenerateKey()
 	test.AssertNotError(t, err, "Couldn't generate temporary server key or recovery secret")
 }

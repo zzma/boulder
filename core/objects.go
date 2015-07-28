@@ -82,10 +82,9 @@ const (
 
 // These types are the available challenges
 const (
-	ChallengeTypeSimpleHTTP    = "simpleHttp"
-	ChallengeTypeDVSNI         = "dvsni"
-	ChallengeTypeDNS           = "dns"
-	ChallengeTypeRecoveryToken = "recoveryToken"
+	ChallengeTypeSimpleHTTP = "simpleHttp"
+	ChallengeTypeDVSNI      = "dvsni"
+	ChallengeTypeDNS        = "dns"
 )
 
 func (pd *ProblemDetails) Error() string {
