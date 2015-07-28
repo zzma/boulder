@@ -6,14 +6,18 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
-	"github.com/letsencrypt/boulder/test"
 	"math"
 	"math/big"
 	"net/url"
 	"testing"
+
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
+	"github.com/letsencrypt/boulder/test"
 )
 
 // challenges.go
@@ -95,4 +99,13 @@ func TestAcmeURL(t *testing.T) {
 	u, _ := url.Parse(s)
 	a := AcmeURL(*u)
 	test.AssertEquals(t, s, a.String())
+}
+
+func TestGenerateKey(t *testing.T) {
+	ck, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	test.AssertNotError(t, err, "Couldn't generate temporary client key")
+	jwk := &jose.JsonWebKey{Key: ck.PublicKey}
+	r := Recovery{Client: jwk, Length: 65}
+	_, err = r.GenerateKey()
+	test.AssertNotError(t, err, "Couldn't generate temporary server key or recovery secret")
 }

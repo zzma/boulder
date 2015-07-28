@@ -111,14 +111,22 @@ func (ra *RegistrationAuthorityImpl) NewRegistration(init core.Registration) (re
 		return core.Registration{}, core.MalformedRequestError(fmt.Sprintf("Invalid public key: %s", err.Error()))
 	}
 	reg = core.Registration{
-		RecoveryToken: core.NewToken(),
-		Key:           init.Key,
+		Key: init.Key,
 	}
 	reg.MergeUpdate(init)
 
 	err = validateContacts(reg.Contact, ra.DNSResolver)
 	if err != nil {
 		return
+	}
+
+	if reg.Recovery != nil {
+		reg.RecoverySecret, err = reg.Recovery.GenerateKey()
+		// Returned error can be a user error or internal error, GenerateKey should
+		// return an appropriately wrapped error in these cases.
+		if err != nil {
+			return
+		}
 	}
 
 	// Store the authorization object, then return it
@@ -373,7 +381,16 @@ func (ra *RegistrationAuthorityImpl) UpdateRegistration(base core.Registration, 
 	}
 
 	reg = base
-	err = ra.SA.UpdateRegistration(base)
+	if reg.Recovery != nil {
+		reg.RecoverySecret, err = reg.Recovery.GenerateKey()
+		// Returned error can be a user error or internal error, GenerateKey should
+		// return an appropriately wrapped error in these cases.
+		if err != nil {
+			return
+		}
+	}
+
+	err = ra.SA.UpdateRegistration(reg)
 	if err != nil {
 		// InternalServerError since the user-data was validated before being
 		// passed to the SA.

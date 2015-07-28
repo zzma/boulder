@@ -6,11 +6,18 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"net"
 	"path/filepath"
 	"sort"
@@ -184,6 +191,66 @@ func (cr CertificateRequest) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// Recovery struct is used to pass
+type Recovery struct {
+	Server *jose.JsonWebKey `json:"server,omitempty"`
+	Client *jose.JsonWebKey `json:"client,omitempty"`
+	Length int              `json:"length,omitempty"`
+}
+
+func (r *Recovery) GenerateKey() ([]byte, error) {
+	var pub *ecdsa.PublicKey
+	switch t := r.Client.Key.(type) {
+	case ecdsa.PublicKey:
+		pub = &t
+	case *ecdsa.PublicKey:
+		pub = t
+	default:
+		// BAD
+		return nil, MalformedRequestError(fmt.Errorf("baddy").Error())
+	}
+	var h hash.Hash
+	switch pub.Curve {
+	case elliptic.P256():
+		h = sha256.New()
+	case elliptic.P384():
+		h = sha512.New384()
+	case elliptic.P521():
+		h = sha512.New()
+	default:
+		return nil, MalformedRequestError(fmt.Errorf("Unsupported curve").Error())
+	}
+
+	priv, err := ecdsa.GenerateKey(pub.Curve, rand.Reader)
+	if err != nil {
+		return nil, InternalServerError(err.Error())
+	}
+
+	// Derive ECDH primitive
+	z := ecdhPrimitive(pub.Curve, priv, pub)
+	// Derive key material
+	k := make([]byte, r.Length)
+	for i := 0; i <= r.Length/h.Size(); i++ {
+		counterBuf := make([]byte, 4)
+		binary.BigEndian.PutUint32(counterBuf, uint32(i))
+		h.Write(append(z, append(counterBuf, []byte("recovery")...)...))
+		copy(k[h.Size()*i:], h.Sum(nil))
+		h.Reset()
+	}
+
+	// Remove client key and secret length
+	r.Client = nil
+	r.Length = 0
+	// Set server key
+	r.Server = &jose.JsonWebKey{Key: priv}
+	return k, nil
+}
+
+func ecdhPrimitive(curve elliptic.Curve, priv *ecdsa.PrivateKey, pub *ecdsa.PublicKey) []byte {
+	x, _ := curve.ScalarMult(pub.X, pub.Y, priv.D.Bytes())
+	return x.Bytes()
+}
+
 // Registration objects represent non-public metadata attached
 // to account keys.
 type Registration struct {
@@ -193,8 +260,10 @@ type Registration struct {
 	// Account key to which the details are attached
 	Key jose.JsonWebKey `json:"key" db:"jwk"`
 
-	// Recovery Token is used to prove connection to an earlier transaction
-	RecoveryToken string `json:"recoveryToken" db:"recoveryToken"`
+	// Recovery Key is used to prove onwership of a registration without the
+	// account key.
+	Recovery       *Recovery `json:"recoveryKey,omitempty" db:"-"`
+	RecoverySecret []byte    `json:"-" db:"recoverySecret"`
 
 	// Contact URIs
 	Contact []AcmeURL `json:"contact,omitempty" db:"contact"`
@@ -214,6 +283,10 @@ func (r *Registration) MergeUpdate(input Registration) {
 
 	if len(input.Agreement) > 0 {
 		r.Agreement = input.Agreement
+	}
+
+	if input.Recovery != nil {
+		r.Recovery = input.Recovery
 	}
 }
 
@@ -602,4 +675,13 @@ type OCSPSigningRequest struct {
 	Status    string
 	Reason    int
 	RevokedAt time.Time
+}
+
+// Recovery struct represents requests made to the recover-reg endpoint (either
+// HMAC or contact based)
+type RecoverReg struct {
+	Method  string
+	Base    string
+	Contact []AcmeURL
+	Mac     jose.JsonWebSignature
 }
