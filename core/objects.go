@@ -676,11 +676,11 @@ type OCSPSigningRequest struct {
 	RevokedAt time.Time
 }
 
-// Recovery struct represents requests made to the recover-reg endpoint (either
+// RecoverRegistrationRequest struct represents requests made to the recover-reg endpoint (either
 // HMAC or contact based)
-type RecoverReg struct {
+type RecoverRegistrationRequest struct {
 	Method  string
 	Base    string
 	Contact []AcmeURL
-	Mac     jose.JsonWebSignature
+	MAC     jose.JsonWebSignature
 }

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1057,6 +1058,82 @@ func (wfe *WebFrontEndImpl) BuildID(response http.ResponseWriter, request *http.
 	if _, err := fmt.Fprintln(response, detailsString); err != nil {
 		logEvent.Error = err.Error()
 		wfe.log.Warning(fmt.Sprintf("Could not write response: %s", err))
+	}
+}
+
+func (wfe *WebFrontEndImpl) RecoverRegistration(response http.ResponseWriter, request *http.Request) {
+	logEvent := wfe.populateRequestEvent(request)
+	defer wfe.logRequestDetails(&logEvent)
+
+	body, newKey, _, err := wfe.verifyPOST(request, false)
+	if err != nil {
+		logEvent.Error = err.Error()
+		wfe.sendError(response, malformedJWS, err, http.StatusBadRequest)
+		return
+	}
+
+	var recReg core.RecoverRegistrationRequest
+	err = json.Unmarshal(body, &recReg)
+	if err != nil {
+		logEvent.Error = err.Error()
+		wfe.sendError(response, "Error unmarshaling JSON", err, http.StatusBadRequest)
+		return
+	}
+
+	idStr := parseIDFromPath(recReg.Base)
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		logEvent.Error = err.Error()
+		wfe.sendError(response, "Registration ID must be an integer", err, http.StatusBadRequest)
+		return
+	} else if id <= 0 {
+		logEvent.Error = "Registration ID must be a positive non-zero integer"
+		wfe.sendError(response, logEvent.Error, id, http.StatusBadRequest)
+		return
+	}
+
+	oldReg, err := wfe.SA.GetRegistration(id)
+	if err != nil {
+		logEvent.Error = "Couldn't find registration with provided ID"
+		wfe.sendError(response, logEvent.Error, err, http.StatusNotFound)
+		return
+	}
+
+	if len(oldReg.RecoverySecret) == 0 {
+		logEvent.Error = "Registration has no recovery secret set"
+		wfe.sendError(response, logEvent.Error, nil, http.StatusBadRequest)
+		return
+	}
+
+	switch recReg.Method {
+	case "mac":
+		// Check signature algorithm
+		// Verify signature using recovery secret
+		payload, _, err := recReg.MAC.Verify(oldReg.RecoverySecret)
+		if err != nil {
+			logEvent.Error = err.Error()
+			wfe.sendError(response, "Invalid MAC signature", err, http.StatusForbidden)
+			return
+		}
+		// Check payload matches signing key
+		jsonKey, err := json.Marshal(newKey)
+		if err != nil {
+			logEvent.Error = err.Error()
+			wfe.sendError(response, "Error unmarshaling JSON", err, http.StatusBadRequest)
+			return
+		}
+		encodedKey := base64.StdEncoding.EncodeToString(jsonKey)
+		if encodedKey != string(payload) {
+			logEvent.Error = "MAC payload doesn't match key used to sign message"
+			wfe.sendError(response, logEvent.Error, nil, http.StatusBadRequest)
+			return
+		}
+
+		// SUCCESS!
+	case "contact":
+	default:
+		logEvent.Error = "Recovery method not supported"
+		wfe.sendError(response, logEvent.Error, nil, http.StatusBadRequest)
 	}
 }
 
