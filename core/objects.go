@@ -254,10 +254,10 @@ type Challenge struct {
 	Validation *jose.JsonWebSignature `json:"validation,omitempty"`
 
 	// IP addresses resolved from authorization identifier during SimpleHTTP validation
-	ResolvedAddrs []net.IP `json:"resolvedAddrs,omitempty"`
+	ResolvedAddrs []net.IP `json:"-"` // FIX(rolandshoemaker): this will break rpc layer
 
 	// URLs redirected to during SimpleHTTP validation
-	Redirects []string `json:"redirects,omitempty"`
+	Redirects []string `json:"-"` // FIX(rolandshoemaker): this will break rpc layer
 }
 
 // IsSane checks the sanity of a challenge object before issued to the client
