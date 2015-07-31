@@ -122,6 +122,7 @@
 
   "va": {
     "userAgent": "boulder",
+    "addressFilter": "v4",
     "debugAddr": "localhost:8004"
   },
 
