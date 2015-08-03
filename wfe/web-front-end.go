@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html/template"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -768,6 +769,8 @@ func (wfe *WebFrontEndImpl) challenge(authz core.Authorization, response http.Re
 	switch request.Method {
 	case "GET":
 		challenge := authz.Challenges[challengeIndex]
+		challenge.ResolvedAddrs = []net.IP{}
+		challenge.Redirects = []string{}
 		jsonReply, err := json.Marshal(challenge)
 		if err != nil {
 			logEvent.Error = err.Error()
@@ -838,6 +841,8 @@ func (wfe *WebFrontEndImpl) challenge(authz core.Authorization, response http.Re
 		}
 
 		challenge := updatedAuthz.Challenges[challengeIndex]
+		challenge.ResolvedAddrs = []net.IP{}
+		challenge.Redirects = []string{}
 		// assumption: UpdateAuthorization does not modify order of challenges
 		jsonReply, err := json.Marshal(challenge)
 		if err != nil {
@@ -976,6 +981,11 @@ func (wfe *WebFrontEndImpl) Authorization(response http.ResponseWriter, request 
 	case "GET":
 		authz.ID = ""
 		authz.RegistrationID = 0
+		// Blank out resolved addresses and redirect chains
+		for i := range authz.Challenges {
+			authz.Challenges[i].ResolvedAddrs = []net.IP{}
+			authz.Challenges[i].Redirects = []string{}
+		}
 
 		jsonReply, err := json.Marshal(authz)
 		if err != nil {
