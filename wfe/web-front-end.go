@@ -768,7 +768,7 @@ func (wfe *WebFrontEndImpl) challenge(authz core.Authorization, response http.Re
 	switch request.Method {
 	case "GET":
 		challenge := authz.Challenges[challengeIndex]
-		challenge.Targets = nil
+		challenge.ValidationRecord = nil
 		jsonReply, err := json.Marshal(challenge)
 		if err != nil {
 			logEvent.Error = err.Error()
@@ -839,7 +839,7 @@ func (wfe *WebFrontEndImpl) challenge(authz core.Authorization, response http.Re
 		}
 
 		challenge := updatedAuthz.Challenges[challengeIndex]
-		challenge.Targets = nil
+		challenge.ValidationRecord = nil
 		// assumption: UpdateAuthorization does not modify order of challenges
 		jsonReply, err := json.Marshal(challenge)
 		if err != nil {
@@ -980,7 +980,7 @@ func (wfe *WebFrontEndImpl) Authorization(response http.ResponseWriter, request 
 		authz.RegistrationID = 0
 		// Blank out resolved addresses and redirect chains
 		for i := range authz.Challenges {
-			authz.Challenges[i].Targets = nil
+			authz.Challenges[i].ValidationRecord = nil
 		}
 
 		jsonReply, err := json.Marshal(authz)
