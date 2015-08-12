@@ -6,6 +6,7 @@
 package core
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
@@ -139,24 +140,42 @@ func Fingerprint256(data []byte) string {
 	return B64enc(d.Sum(nil))
 }
 
+func keyDER(key crypto.PublicKey) ([]byte, error) {
+	switch t := key.(type) {
+	case *jose.JsonWebKey:
+		if t == nil {
+			return nil, fmt.Errorf("Nil key.")
+		}
+		return keyDER(t.Key)
+	case jose.JsonWebKey:
+		return keyDER(t.Key)
+	default:
+		return x509.MarshalPKIXPublicKey(key)
+	}
+}
+
 // KeyDigest produces a padded, standard Base64-encoded SHA256 digest of a
 // provided public key.
 func KeyDigest(key crypto.PublicKey) (string, error) {
-	switch t := key.(type) {
-	case *jose.JsonWebKey:
-		return KeyDigest(t.Key)
-	case jose.JsonWebKey:
-		return KeyDigest(t.Key)
-	default:
-		keyDER, err := x509.MarshalPKIXPublicKey(key)
-		if err != nil {
-			logger := blog.GetAuditLogger()
-			logger.Debug(fmt.Sprintf("Problem marshaling public key: %s", err))
-			return "", err
-		}
-		spkiDigest := sha256.Sum256(keyDER)
-		return base64.StdEncoding.EncodeToString(spkiDigest[0:32]), nil
+	keyDER, err := keyDER(key)
+	if err != nil {
+		logger := blog.GetAuditLogger()
+		logger.Debug(fmt.Sprintf("Problem marshaling public key: %s", err))
+		return "", err
 	}
+	spkiDigest := sha256.Sum256(keyDER)
+	return base64.StdEncoding.EncodeToString(spkiDigest[0:32]), nil
+}
+
+func KeyEquals(j, k crypto.PublicKey) bool {
+	jDER, errJ := keyDER(j)
+	kDER, errK := keyDER(k)
+	// Keys that don't have a valid digest (due to marshalling problems)
+	// are never equal. So, e.g. nil keys are not equal.
+	if errJ != nil || errK != nil {
+		return false
+	}
+	return bytes.Equal(jDER, kDER)
 }
 
 // KeyDigestEquals determines whether two public keys have the same digest.

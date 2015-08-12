@@ -85,7 +85,7 @@ def cleanup():
 
 exit_status = ExitStatus.OK
 tempdir = tempfile.mkdtemp()
-if not startservers.start(race_detection=True):
+if not startservers.start(race_detection=False):
     die(ExitStatus.Error)
 run_node_test()
 run_client_tests()
