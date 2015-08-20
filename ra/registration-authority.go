@@ -179,8 +179,11 @@ func (ra *RegistrationAuthorityImpl) NewAuthorization(request core.Authorization
 
 	// Construct all the challenge URIs
 	for i := range challenges {
-		// Ignoring these errors because we construct the URLs to be correct
-		challengeURI, _ := core.ParseAcmeURL(ra.AuthzBase + authz.ID + "?challenge=" + strconv.Itoa(i))
+		challengeURI, err := core.ParseAcmeURL(ra.AuthzBase + authz.ID + "?challenge=" + strconv.Itoa(i))
+		if err != nil {
+			err = core.InternalServerError(fmt.Sprintf("Problem constructing challenge URI: %s", err))
+			return authz, err
+		}
 		challenges[i].URI = challengeURI
 
 		if !challenges[i].IsSane(false) {
