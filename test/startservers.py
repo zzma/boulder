@@ -36,13 +36,14 @@ def install(progs, race_detection):
     install = "go install"
     if race_detection:
         install = """go install -race"""
-    cmd = install + " " + " ".join(progs)
+    cmd = install
+    for prog in progs:
+        cmd += " ./" + prog
     p = subprocess.Popen(cmd, shell=True)
-    p.cmd = cmd
     if p.wait() != 0:
-        raise "couldn't do the thing %s" (p.cmd)
-    print('installed %s with pid %d' % (p.cmd, p.pid))
-    return
+        sys.stderr.write("couldn't  %s\n" (cmd))
+    print('installed %s with pid %d' % (cmd, p.pid))
+    return true
 
 def run(path, race_detection):
     binary = os.path.basename(path)
