@@ -41,7 +41,8 @@ def install(progs, race_detection):
     p.cmd = cmd
     if p.wait() != 0:
         raise "couldn't do the thing %s" (p.cmd)
-    print('installed %s with pid %d' % (p.cmd, p.pid)
+    print('installed %s with pid %d' % (p.cmd, p.pid))
+    return
 
 def run(path, race_detection):
     binary = os.path.basename(path)
@@ -70,7 +71,7 @@ def start(race_detection):
             'cmd/ocsp-responder',
             'test/dns-test-srv']
     install(progs, race_detection)
-    for prog in :
+    for prog in progs:
         try:
             processes.append(run(prog, race_detection))
         except Exception as e:
