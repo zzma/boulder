@@ -32,18 +32,24 @@ if config is None:
 processes = []
 
 
-def run(path, race_detection):
+def install(progs, race_detection):
     install = "go install"
     if race_detection:
-        install = """GORACE="halt_on_error=1" go install -race"""
+        install = """go install -race"""
+    cmd += " " + " ".join(progs)
+    p = subprocess.Popen(cmd, shell=True)
+    p.cmd = cmd
+    if p.wait() != 0:
+        raise "couldn't do the thing %s" (p.cmd)
+    print('installed %s with pid %d' % (p.cmd, p.pid)
 
+def run(path, race_detection):
     binary = os.path.basename(path)
-    cmd = """%s ./%s && exec %s --config %s""" % (install, path, binary, config)
+    cmd = """GORACE="halt_on_error=1" %s --config %s""" % (path, binary, config)
     p = subprocess.Popen(cmd, shell=True)
     p.cmd = cmd
     print('started %s with pid %d' % (p.cmd, p.pid))
     return p
-
 
 def start(race_detection):
     """Return True if everything builds and starts.
@@ -56,14 +62,15 @@ def start(race_detection):
     t = ToSServerThread()
     t.daemon = True
     t.start()
-    for prog in [
-            'cmd/boulder-wfe',
+    progs =['cmd/boulder-wfe',
             'cmd/boulder-ra',
             'cmd/boulder-sa',
             'cmd/boulder-ca',
             'cmd/boulder-va',
             'cmd/ocsp-responder',
-            'test/dns-test-srv']:
+            'test/dns-test-srv']
+    install(progs, race_detection)
+    for prog in :
         try:
             processes.append(run(prog, race_detection))
         except Exception as e:
