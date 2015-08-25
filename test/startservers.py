@@ -36,7 +36,7 @@ def install(progs, race_detection):
     install = "go install"
     if race_detection:
         install = """go install -race"""
-    cmd += " " + " ".join(progs)
+    cmd = install + " " + " ".join(progs)
     p = subprocess.Popen(cmd, shell=True)
     p.cmd = cmd
     if p.wait() != 0:
