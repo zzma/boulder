@@ -45,8 +45,9 @@ def install(progs, race_detection):
         sys.stderr.write("unable to run go install: %s\n" (cmd))
         sys.stderr.write("stdout:\n" + out + "\n")
         sys.stderr.write("stderr: \n" + err + "\n")
+        return False
     print('installed %s with pid %d' % (cmd, p.pid))
-    return
+    return True
 
 def run(path, race_detection):
     binary = os.path.basename(path)
@@ -74,7 +75,8 @@ def start(race_detection):
             'cmd/boulder-va',
             'cmd/ocsp-responder',
             'test/dns-test-srv']
-    install(progs, race_detection)
+    if not install(progs, race_detection):
+        return False
     for prog in progs:
         try:
             processes.append(run(prog, race_detection))
