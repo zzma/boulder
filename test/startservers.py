@@ -43,7 +43,7 @@ def install(progs, race_detection):
     if p.wait() != 0:
         sys.stderr.write("couldn't  %s\n" (cmd))
     print('installed %s with pid %d' % (cmd, p.pid))
-    return true
+    return
 
 def run(path, race_detection):
     binary = os.path.basename(path)
