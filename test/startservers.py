@@ -39,9 +39,12 @@ def install(progs, race_detection):
     cmd = install
     for prog in progs:
         cmd += " ./" + prog
-    p = subprocess.Popen(cmd, shell=True)
-    if p.wait() != 0:
-        sys.stderr.write("couldn't  %s\n" (cmd))
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out, err = p.communicate()
+    if p.returncode != 0:
+        sys.stderr.write("unable to run go install: %s\n" (cmd))
+        sys.stderr.write("stdout:\n" + out + "\n")
+        sys.stderr.write("stderr: \n" + err + "\n")
     print('installed %s with pid %d' % (cmd, p.pid))
     return
 
