@@ -32,6 +32,7 @@ const (
 	RegPath        = "/acme/reg/"
 	NewAuthzPath   = "/acme/new-authz"
 	AuthzPath      = "/acme/authz/"
+	ChallengePath  = "/acme/challenge/"
 	NewCertPath    = "/acme/new-cert"
 	CertPath       = "/acme/cert/"
 	RevokeCertPath = "/acme/revoke-cert"

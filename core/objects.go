@@ -241,6 +241,8 @@ type ValidationRecord struct {
 // challenge, we just throw all the elements into one bucket,
 // together with the common metadata elements.
 type Challenge struct {
+	ID int64 `json:"id"`
+
 	// The type of challenge
 	Type string `json:"type"`
 
