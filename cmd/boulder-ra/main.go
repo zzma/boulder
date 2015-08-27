@@ -15,7 +15,6 @@ import (
 	blog "github.com/letsencrypt/boulder/log"
 	"github.com/letsencrypt/boulder/ra"
 	"github.com/letsencrypt/boulder/rpc"
-	"github.com/letsencrypt/boulder/wfe"
 )
 
 func main() {

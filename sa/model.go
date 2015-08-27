@@ -132,7 +132,7 @@ func modelToChallenge(cm *challModel) (core.Challenge, error) {
 		Token:     cm.Token,
 		TLS:       cm.TLS,
 	}
-	uri, err := core.ParseAcmeURL(fmt.Sprintf("%s%d", ChallengePath, cm.ID))
+	uri, err := core.ParseAcmeURL(fmt.Sprintf("%s%s/%d", ChallengePath, cm.AuthorizationID, cm.ID))
 	if err != nil {
 		return core.Challenge{}, err
 	}
