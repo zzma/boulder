@@ -130,7 +130,8 @@ func (ra *RegistrationAuthorityImpl) NewRegistration(init core.Registration) (re
 
 // NewAuthorization constuct a new Authz from a request.
 func (ra *RegistrationAuthorityImpl) NewAuthorization(request core.Authorization, regID int64) (authz core.Authorization, err error) {
-	if regID <= 0 {
+	reg, err := ra.SA.GetRegistration(regID)
+	if err != nil {
 		err = core.MalformedRequestError(fmt.Sprintf("Invalid registration ID: %d", regID))
 		return authz, err
 	}
@@ -157,6 +158,11 @@ func (ra *RegistrationAuthorityImpl) NewAuthorization(request core.Authorization
 
 	// Create validations, but we have to update them with URIs later
 	challenges, combinations := ra.PA.ChallengesFor(identifier)
+
+	for _, challenge := range challenges {
+		// Add the account key used to generate the challenge
+		challenge.AccountKey = &reg.Key
+	}
 
 	// Partially-filled object
 	authz = core.Authorization{
@@ -361,24 +367,55 @@ func (ra *RegistrationAuthorityImpl) UpdateAuthorization(base core.Authorization
 		return
 	}
 
+	// Reject the update if the challenge in question was created
+	// with a different account key
+	if !core.KeyDigestEquals(reg.Key, authz.Challenges[challengeIndex].AccountKey) {
+		err = core.UnauthorizedError("Challenge cannot be updated with a different key")
+		return
+	}
+
 	// Dispatch to the VA for service
-	ra.VA.UpdateValidations(authz, challengeIndex, reg.Key)
+	ra.VA.UpdateValidations(authz, challengeIndex)
 
 	return
 }
 
 // RevokeCertificate terminates trust in the certificate provided.
-func (ra *RegistrationAuthorityImpl) RevokeCertificate(cert x509.Certificate) (err error) {
+func (ra *RegistrationAuthorityImpl) RevokeCertificate(cert x509.Certificate, revocationCode core.RevocationCode, regID *int64) (err error) {
 	serialString := core.SerialToString(cert.SerialNumber)
-	err = ra.CA.RevokeCertificate(serialString, 0)
+	err = ra.CA.RevokeCertificate(serialString, revocationCode)
 
-	// AUDIT[ Revocation Requests ] 4e85d791-09c0-4ab3-a837-d3d67e945134
+	state := "Failure"
+	defer func() {
+		// AUDIT[ Revocation Requests ] 4e85d791-09c0-4ab3-a837-d3d67e945134
+		// Needed:
+		//   Serial
+		//   CN
+		//   Revocation reason
+		//   Error (if there was one)
+		revMsg := fmt.Sprintf(
+			"Revocation - State: %s, Serial: %s, CN: %s, DNS Names: %s, Reason: %s",
+			state,
+			serialString,
+			cert.Subject.CommonName,
+			cert.DNSNames,
+			core.RevocationReasons[revocationCode],
+		)
+		// Check regID is set, if not revocation came from the admin-revoker tool
+		if regID != nil {
+			revMsg = fmt.Sprintf("%s, Requested by registration ID: %d", revMsg, *regID)
+		} else {
+			revMsg = fmt.Sprintf("%s, Revoked using admin tool", revMsg)
+		}
+		ra.log.Audit(revMsg)
+	}()
+
 	if err != nil {
-		ra.log.Audit(fmt.Sprintf("Revocation error - %s - %s", serialString, err))
+		state = fmt.Sprintf("Failure -- %s", err)
 		return err
 	}
+	state = "Success"
 
-	ra.log.Audit(fmt.Sprintf("Revocation - %s", serialString))
 	return err
 }
 
