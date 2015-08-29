@@ -793,14 +793,14 @@ func (wfe *WebFrontEndImpl) Challenge(response http.ResponseWriter, request *htt
 
 	switch request.Method {
 	case "GET":
-		wfe.GetChallenge(response, request, authz, challenge, &logEvent)
+		wfe.getChallenge(response, request, authz, challenge, &logEvent)
 
 	case "POST":
-		wfe.PostChallenge(response, request, authz, challenge, &logEvent)
+		wfe.postChallenge(response, request, authz, challenge, &logEvent)
 	}
 }
 
-func (wfe *WebFrontEndImpl) GetChallenge(
+func (wfe *WebFrontEndImpl) getChallenge(
 		response http.ResponseWriter,
 		request *http.Request,
 		authz core.Authorization,
@@ -827,7 +827,7 @@ func (wfe *WebFrontEndImpl) GetChallenge(
 	}
 }
 
-func (wfe *WebFrontEndImpl) PostChallenge(
+func (wfe *WebFrontEndImpl) postChallenge(
 		response http.ResponseWriter,
 		request *http.Request,
 		authz core.Authorization,
