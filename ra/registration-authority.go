@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"regexp"
 	"strings"
 	"time"
 
@@ -42,12 +41,6 @@ func NewRegistrationAuthorityImpl() RegistrationAuthorityImpl {
 	ra := RegistrationAuthorityImpl{log: logger}
 	ra.PA = policy.NewPolicyAuthorityImpl()
 	return ra
-}
-
-var allButLastPathSegment = regexp.MustCompile("^.*/")
-
-func lastPathSegment(url *core.AcmeURL) string {
-	return allButLastPathSegment.ReplaceAllString(url.Path, "")
 }
 
 func validateEmail(address string, resolver core.DNSResolver) (err error) {
@@ -342,42 +335,51 @@ func (ra *RegistrationAuthorityImpl) UpdateRegistration(base core.Registration, 
 	return
 }
 
-// UpdateAuthorization updates an authorization with new values.
-func (ra *RegistrationAuthorityImpl) UpdateAuthorization(base core.Authorization, challengeIndex int, response core.Challenge) (authz core.Authorization, err error) {
-	// Copy information over that the client is allowed to supply
-	authz = base
-	if challengeIndex >= len(authz.Challenges) {
-		err = core.MalformedRequestError(fmt.Sprintf("Invalid challenge index: %d", challengeIndex))
-		return
-	}
-	authz.Challenges[challengeIndex] = authz.Challenges[challengeIndex].MergeResponse(response)
-
-	// Store the updated version
-	if err = ra.SA.UpdatePendingAuthorization(authz); err != nil {
-		// This can pretty much only happen when the client corrupts the Challenge
-		// data.
-		err = core.MalformedRequestError("Challenge data was corrupted")
-		return
+// UpdateChallenge updates a challenge with new values.
+func (ra *RegistrationAuthorityImpl) UpdateChallenge(authz core.Authorization, current core.Challenge, update core.Challenge) (core.Challenge, error) {
+	// Validate that challenge actually belongs to the authorization. NOTE: The
+	// authorization object is only needed to (1) look up the registration object
+	// and check the account key, and (2) call VA.UpdateValidations. We may want
+	// to refactor VA.UpdateValidations to just take a challenge as well, at which
+	// point we may get rid of the authorization argument in this function.
+	challengeIndex := authz.FindChallenge(current.ID)
+	if challengeIndex == -1 {
+		err := errors.New("Authorization used in UpdateChallenge did not contain the challenge.")
+		return core.Challenge{}, err
 	}
 
 	// Look up the account key for this authorization
 	reg, err := ra.SA.GetRegistration(authz.RegistrationID)
 	if err != nil {
-		err = core.InternalServerError(err.Error())
-		return
+		return core.Challenge{}, err
 	}
 
 	// Reject the update if the challenge in question was created
 	// with a different account key
-	if !core.KeyDigestEquals(reg.Key, authz.Challenges[challengeIndex].AccountKey) {
+	if !core.KeyDigestEquals(reg.Key, current.AccountKey) {
 		err = core.UnauthorizedError("Challenge cannot be updated with a different key")
-		return
+		return core.Challenge{}, err
 	}
 
-	// Dispatch to the VA for service
+	// Copy information over that the client is allowed to supply
+	merged := current.MergeResponse(update)
+
+/// XXX TODO: reject if challenge in progress, don't trigger multiple
+//validations
+	// Store the updated version
+	err = ra.SA.UpdateChallenge(merged)
+	if err != nil {
+		// This can pretty much only happen when the client corrupts the Challenge
+		// data.
+		err = core.MalformedRequestError("Challenge data was corrupted")
+		return core.Challenge{}, err
+	}
+
+	// Dispatch to the VA for service. TODO(jsha): Update the VA API to take a
+	// challenge instead of an authz.
 	ra.VA.UpdateValidations(authz, challengeIndex)
 
-	return
+	return merged, nil
 }
 
 // RevokeCertificate terminates trust in the certificate provided.

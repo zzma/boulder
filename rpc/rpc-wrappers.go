@@ -59,6 +59,7 @@ const (
 	MethodFinalizeAuthorization       = "FinalizeAuthorization"       // SA
 	MethodAddCertificate              = "AddCertificate"              // SA
 	MethodAlreadyDeniedCSR            = "AlreadyDeniedCSR"            // SA
+	MethodChallenge                   = "UpdateChallenge"             // SA
 )
 
 // Request structs

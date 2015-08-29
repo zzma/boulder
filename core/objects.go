@@ -433,6 +433,18 @@ type Authorization struct {
 	Combinations [][]int `json:"combinations,omitempty" db:"combinations"`
 }
 
+// FindChallenge will look for the given challenge inside this authorization. If
+// found, it will return the index of that challenge within the Authorization's
+// Challenges array. Otherwise it will return -1.
+func (authz *Authorization) FindChallenge(challengeID int64) int {
+	for i, c := range authz.Challenges {
+		if c.ID == challengeID {
+			return i
+		}
+	}
+	return -1
+}
+
 // JSONBuffer fields get encoded and decoded JOSE-style, in base64url encoding
 // with stripped padding.
 type JSONBuffer []byte

@@ -459,21 +459,39 @@ func (ssa *SQLStorageAuthority) NewPendingAuthorization(authz core.Authorization
 	return
 }
 
+func (ssa *SQLStorageAuthority) GetChallenge(challengeID int64) (core.Challenge, error) {
+	result, err := ssa.dbMap.Get(challModel{}, challengeID)
+	if err != nil {
+		return core.Challenge{}, err
+	}
+	if result == nil {
+		return core.Challenge{}, fmt.Errorf("Requested challenge not found %d", challengeID)
+	}
+	model, ok := result.(*challModel)
+	if !ok {
+		return core.Challenge{}, errors.New("Failed to convert challenge result to challenge model")
+	}
+	return modelToChallenge(model)
+}
+
 func (ssa *SQLStorageAuthority) UpdateChallenge(challenge core.Challenge) (err error) {
+	if challenge.ID == 0 {
+		err = errors.New("Cannot update challenge with id 0")
+	}
 	// First read the challenge to get the existing authz relationship.
-	var oldChallengeModel challModel
+	var currentChallengeModel challModel
 	err = ssa.dbMap.SelectOne(
-		&oldChallengeModel,
+		&currentChallengeModel,
 		"SELECT * FROM challenges WHERE ID = :id",
 		map[string]interface{}{"id": challenge.ID})
 	if err != nil {
 		return err
 	}
-	model, err := challengeToModel(&challenge, oldChallengeModel.ID)
+	model, err := challengeToModel(&challenge, currentChallengeModel.AuthorizationID)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Update(model)
+	_, err = ssa.dbMap.Update(model)
 	if err != nil {
 		return err
 	}

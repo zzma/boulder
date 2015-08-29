@@ -68,7 +68,7 @@ type RegistrationAuthority interface {
 	UpdateRegistration(Registration, Registration) (Registration, error)
 
 	// [WebFrontEnd]
-	UpdateAuthorization(Authorization, int, Challenge) (Authorization, error)
+	UpdateChallenge(Authorization, Challenge, Challenge) (Challenge, error)
 
 	// [WebFrontEnd]
 	RevokeCertificate(x509.Certificate, RevocationCode, *int64) error
@@ -103,6 +103,7 @@ type StorageGetter interface {
 	GetRegistration(int64) (Registration, error)
 	GetRegistrationByKey(jose.JsonWebKey) (Registration, error)
 	GetAuthorization(string) (Authorization, error)
+	GetChallenge(int64) (Challenge, error)
 	GetLatestValidAuthorization(int64, AcmeIdentifier) (Authorization, error)
 	GetCertificate(string) (Certificate, error)
 	GetCertificateByShortSerial(string) (Certificate, error)

@@ -202,7 +202,6 @@ func initAuthorities(t *testing.T) (*DummyValidationAuthority, *sa.SQLStorageAut
 	ra.VA = va
 	ra.CA = &ca
 	ra.PA = pa
-	ra.AuthzBase = "http://acme.invalid/authz/"
 	ra.MaxKeySize = 4096
 	ra.DNSResolver = &mocks.MockDNS{}
 
@@ -395,7 +394,7 @@ func TestUpdateAuthorization(t *testing.T) {
 	authz, err := ra.NewAuthorization(AuthzRequest, Registration.ID)
 	test.AssertNotError(t, err, "NewAuthorization failed")
 
-	authz, err = ra.UpdateAuthorization(authz, ResponseIndex, Response)
+	authz.Challenges[ResponseIndex], err = ra.UpdateChallenge(authz, authz.Challenges[ResponseIndex], Response)
 	test.AssertNotError(t, err, "UpdateAuthorization failed")
 
 	// Verify that returned authz same as DB
@@ -429,7 +428,7 @@ func TestUpdateAuthorizationReject(t *testing.T) {
 	test.AssertNotError(t, err, "UpdateRegistration failed")
 
 	// Verify that the RA rejected the authorization request
-	_, err = ra.UpdateAuthorization(authz, ResponseIndex, Response)
+	_, err = ra.UpdateChallenge(authz, authz.Challenges[ResponseIndex], Response)
 	test.AssertEquals(t, err, core.UnauthorizedError("Challenge cannot be updated with a different key"))
 
 	t.Log("DONE TestUpdateAuthorizationReject")
