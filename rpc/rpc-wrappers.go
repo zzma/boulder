@@ -38,7 +38,7 @@ const (
 	MethodNewAuthorization            = "NewAuthorization"            // RA
 	MethodNewCertificate              = "NewCertificate"              // RA
 	MethodUpdateRegistration          = "UpdateRegistration"          // RA, SA
-	MethodUpdateAuthorization         = "UpdateAuthorization"         // RA
+	MethodUpdateChallenge             = "UpdateChallenge"             // RA
 	MethodRevokeCertificate           = "RevokeCertificate"           // RA, CA
 	MethodOnValidationUpdate          = "OnValidationUpdate"          // RA
 	MethodUpdateValidations           = "UpdateValidations"           // VA
@@ -80,10 +80,10 @@ type authorizationRequest struct {
 	RegID int64
 }
 
-type updateAuthorizationRequest struct {
-	Authz    core.Authorization
-	Index    int
-	Response core.Challenge
+type updateChallengeRequest struct {
+	Authz   core.Authorization
+	Current core.Challenge
+	Update  core.Challenge
 }
 
 type latestValidAuthorizationRequest struct {
@@ -248,24 +248,24 @@ func NewRegistrationAuthorityServer(rpc RPCServer, impl core.RegistrationAuthori
 		return
 	})
 
-	rpc.Handle(MethodUpdateAuthorization, func(req []byte) (response []byte, err error) {
-		var uaReq updateAuthorizationRequest
-		err = json.Unmarshal(req, &uaReq)
+	rpc.Handle(MethodUpdateChallenge, func(req []byte) (response []byte, err error) {
+		var ucReq updateChallengeRequest
+		err = json.Unmarshal(req, &ucReq)
 		if err != nil {
 			// AUDIT[ Improper Messages ] 0786b6f2-91ca-4f48-9883-842a19084c64
-			improperMessage(MethodUpdateAuthorization, err, req)
+			improperMessage(MethodUpdateChallenge, err, req)
 			return
 		}
 
-		newAuthz, err := impl.UpdateAuthorization(uaReq.Authz, uaReq.Index, uaReq.Response)
+		newChallenge, err := impl.UpdateChallenge(ucReq.Authz, ucReq.Current, ucReq.Update)
 		if err != nil {
 			return
 		}
 
-		response, err = json.Marshal(newAuthz)
+		response, err = json.Marshal(newChallenge)
 		if err != nil {
 			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-			errorCondition(MethodUpdateAuthorization, err, req)
+			errorCondition(MethodUpdateChallenge, err, req)
 			return
 		}
 		return
@@ -387,23 +387,23 @@ func (rac RegistrationAuthorityClient) UpdateRegistration(base core.Registration
 }
 
 // UpdateAuthorization sends an Update Authorization request
-func (rac RegistrationAuthorityClient) UpdateAuthorization(authz core.Authorization, index int, response core.Challenge) (newAuthz core.Authorization, err error) {
-	var uaReq updateAuthorizationRequest
-	uaReq.Authz = authz
-	uaReq.Index = index
-	uaReq.Response = response
+func (rac RegistrationAuthorityClient) UpdateAuthorization(authz core.Authorization, current core.Challenge, update core.Challenge) (updatedChallenge core.Challenge, err error) {
+	var ucReq updateChallengeRequest
+	ucReq.Authz = authz
+	ucReq.Current = current
+	ucReq.Update = update
 
-	data, err := json.Marshal(uaReq)
+	data, err := json.Marshal(ucReq)
 	if err != nil {
 		return
 	}
 
-	newAuthzData, err := rac.rpc.DispatchSync(MethodUpdateAuthorization, data)
+	updatedChallengeData, err := rac.rpc.DispatchSync(MethodUpdateChallenge, data)
 	if err != nil {
 		return
 	}
 
-	err = json.Unmarshal(newAuthzData, &newAuthz)
+	err = json.Unmarshal(updatedChallengeData, &updatedChallenge)
 	return
 }
 
