@@ -303,7 +303,14 @@ func (wfe *WebFrontEndImpl) verifyPOST(request *http.Request, regCheck bool, res
 		return nil, nil, reg, err
 	}
 
+	if core.JWKSizeCheck(bodyBytes) {
+		puberr := core.MalformedRequestError("JSON Web Key was too large for boulder to handle. Maximum allowed is %d bytes.", core.MaxJWKSize)
+		wfe.log.Debug(fmt.Sprintf("%v :: %v", puberr.Error(), err.Error()))
+		return nil, nil, reg, puberr
+	}
+
 	body := string(bodyBytes)
+
 	// Parse as JWS
 	parsedJws, err := jose.ParseSigned(body)
 	if err != nil {
