@@ -6,6 +6,7 @@
 package publisher
 
 import (
+	"crypto/ecdsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -216,26 +217,26 @@ func TestNewPublisherImpl(t *testing.T) {
 	test.AssertNotError(t, err, "Couldn't create new Publisher")
 }
 
-func TestCheckSignature(t *testing.T) {
-	// Based on a submission to the aviator log
-	goodSigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEAknaySJVdB3FqG9bUKHgyu7V9AdEabpTc71BELUp6/iECIQDObrkwlQq6Azfj5XOA5E12G/qy/WuRn97z7qMSXXc82Q==")
-	test.AssertNotError(t, err, "Couldn't decode signature")
-
-	testReceipt := core.SignedCertificateTimestamp{
-		Signature: goodSigBytes,
+func TestVerifySignature(t *testing.T) {
+	// Based on an actual submission to the aviator log
+	sigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEAknaySJVdB3FqG9bUKHgyu7V9AdEabpTc71BELUp6/iECIQDObrkwlQq6Azfj5XOA5E12G/qy/WuRn97z7qMSXXc82Q==")
+	if err != nil {
+		return
+	}
+	testReciept := core.SignedCertificateTimestamp{
+		SCTVersion: sctVersion,
+		Timestamp:  1423696705756,
+		Signature:  sigBytes,
 	}
 
-	// Good signature
-	err = testReceipt.CheckSignature()
-	test.AssertNotError(t, err, "Valid signature check failed")
-
-	// Invalid signature (too short, trailing garbage)
-	testReceipt.Signature = goodSigBytes[1:]
-	err = testReceipt.CheckSignature()
-	test.AssertError(t, err, "Invalid signature check failed")
-	testReceipt.Signature = append(goodSigBytes, []byte{0, 0, 1}...)
-	err = testReceipt.CheckSignature()
-	test.AssertError(t, err, "Invalid signature check failed")
+	aviatorPkBytes, err := base64.StdEncoding.DecodeString("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1/TMabLkDpCjiupacAlP7xNi0I1JYP8bQFAHDG1xhtolSY1l4QgNRzRrvSe8liE+NPWHdjGxfx3JhTsN9x8/6Q==")
+	test.AssertNotError(t, err, "Couldn't parse aviator public key")
+	aviatorPk, err := x509.ParsePKIXPublicKey(aviatorPkBytes)
+	test.AssertNotError(t, err, "Couldn't parse aviator public key bytes")
+	leafPEM, _ := pem.Decode([]byte(testLeaf))
+	pk := aviatorPk.(*ecdsa.PublicKey)
+	err = testReciept.VerifySignature(leafPEM.Bytes, pk)
+	test.AssertNotError(t, err, "Signature validation failed")
 }
 
 func TestSubmitToCT(t *testing.T) {

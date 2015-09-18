@@ -6,11 +6,16 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"net"
 	"testing"
 
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
+	"github.com/letsencrypt/boulder/core"
 
 	"github.com/letsencrypt/boulder/test"
 )
@@ -136,4 +141,26 @@ func TestJSONBufferUnmarshal(t *testing.T) {
 	notValidBase64 := []byte(`{"Buffer":"!!!!"}`)
 	err := json.Unmarshal(notValidBase64, &testStruct)
 	test.Assert(t, err != nil, "Should have choked on invalid base64")
+}
+
+func TestVerifySignature(t *testing.T) {
+	// Based on an actual submission to the aviator log
+	sigBytes, err := base64.StdEncoding.DecodeString("BAMASDBGAiEAknaySJVdB3FqG9bUKHgyu7V9AdEabpTc71BELUp6/iECIQDObrkwlQq6Azfj5XOA5E12G/qy/WuRn97z7qMSXXc82Q==")
+	if err != nil {
+		return
+	}
+	testReciept := core.SignedCertificateTimestamp{
+		SCTVersion: sctVersion,
+		Timestamp:  1423696705756,
+		Signature:  sigBytes,
+	}
+
+	aviatorPkBytes, err := base64.StdEncoding.DecodeString("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1/TMabLkDpCjiupacAlP7xNi0I1JYP8bQFAHDG1xhtolSY1l4QgNRzRrvSe8liE+NPWHdjGxfx3JhTsN9x8/6Q==")
+	test.AssertNotError(t, err, "Couldn't parse aviator public key")
+	aviatorPk, err := x509.ParsePKIXPublicKey(aviatorPkBytes)
+	test.AssertNotError(t, err, "Couldn't parse aviator public key bytes")
+	leafPEM, _ := pem.Decode([]byte(testLeaf))
+	pk := aviatorPk.(*ecdsa.PublicKey)
+	err = testReciept.VerifySignature(leafPEM.Bytes, pk)
+	test.AssertNotError(t, err, "Signature validation failed")
 }
