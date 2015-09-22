@@ -6,6 +6,7 @@
 package mail
 
 import (
+	"crypto/rsa"
 	"net"
 	"net/smtp"
 )
@@ -21,6 +22,8 @@ type MailerImpl struct {
 	Port   string
 	Auth   smtp.Auth
 	From   string
+
+	OptOutKey *rsa.PublicKey
 }
 
 // New constructs a Mailer to represent an account on a particular mail

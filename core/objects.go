@@ -6,6 +6,9 @@
 package core
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
@@ -676,4 +679,49 @@ var RevocationReasons = map[RevocationCode]string{
 	8:  "removeFromCRL", // needed?
 	9:  "privilegeWithdrawn",
 	10: "aAcompromise",
+}
+
+// OptOutToken describes the JSON contents of a email opt out token
+type OptOutToken struct {
+	RegID     int
+	Email     string
+	Generated time.Time
+}
+
+func GenerateOptOutToken(pub *rsa.PublicKey, email string, regID int) (string, error) {
+	tokenObj := OptOutToken{
+		RegID:     regID,
+		Email:     email,
+		Generated: time.Now(),
+	}
+	tokenJSON, err := json.Marshal(tokenObj)
+	if err != nil {
+		return "", err
+	}
+	encTokenBytes, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, pub, tokenJSON, []byte("label?"))
+	if err != nil {
+		return "", err
+	}
+
+	return base64.URLEncoding.EncodeToString(encTokenBytes), nil
+}
+
+func DecryptOptOutToken(priv *rsa.PrivateKey, encToken string) (*OptOutToken, error) {
+	encTokenBytes, err := base64.URLEncoding.DecodeString(encToken)
+	if err != nil {
+		return nil, err
+	}
+
+	tokenBytes, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, priv, encTokenBytes, []byte("label?"))
+	if err != nil {
+		return nil, err
+	}
+
+	var token OptOutToken
+	err = json.Unmarshal(tokenBytes, &token)
+	if err != nil {
+		return nil, err
+	}
+
+	return &token, nil
 }

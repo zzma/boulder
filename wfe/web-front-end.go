@@ -1182,6 +1182,17 @@ func (wfe *WebFrontEndImpl) BuildID(response http.ResponseWriter, request *http.
 	}
 }
 
+func (wfe *WebFrontEndImpl) Unsubscribe(response http.ResponseWriter, request *http.Request) {
+	logEvent := wfe.populateRequestEvent(request)
+	defer wfe.logRequestDetails(&logEvent)
+
+	unsubToken := parseIDFromPath(request.URL.Path)
+	if unsubToken == "" {
+		logEvent.Error = "Unsubscribe token is required"
+		wfe.sendError(response, logEvent.Error, nil, http.StatusBadRequest)
+	}
+}
+
 func (wfe *WebFrontEndImpl) logRequestDetails(logEvent *requestEvent) {
 	logEvent.ResponseTime = time.Now()
 	var msg string

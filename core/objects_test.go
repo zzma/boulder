@@ -6,7 +6,10 @@
 package core
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
+	"fmt"
 	"net"
 	"testing"
 
@@ -136,4 +139,20 @@ func TestJSONBufferUnmarshal(t *testing.T) {
 	notValidBase64 := []byte(`{"Buffer":"!!!!"}`)
 	err := json.Unmarshal(notValidBase64, &testStruct)
 	test.Assert(t, err != nil, "Should have choked on invalid base64")
+}
+
+func TestGenerateToken(t *testing.T) {
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	test.AssertNotError(t, err, "Couldn't generate key")
+
+	token, err := GenerateOptOutToken(&k.PublicKey, "test@email.com", 1)
+	test.AssertNotError(t, err, "Couldn't generate opt out token")
+
+	fmt.Println(token)
+	fmt.Println(len(token))
+
+	dec, err := DecryptOptOutToken(k, token)
+	test.AssertNotError(t, err, "Couldn't decrypt opt out token")
+
+	fmt.Println(dec)
 }
