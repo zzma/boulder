@@ -170,14 +170,7 @@ type Config struct {
 		DebugAddr string
 	}
 
-	OCSPUpdater struct {
-		DBConnect       string
-		MinTimeToExpiry string
-		ResponseLimit   int
-
-		// DebugAddr is the address to run the /debug handlers on.
-		DebugAddr string
-	}
+	OCSPUpdater OCSPUpdaterConfig
 
 	Publisher struct {
 		CT publisher.CTConfig
@@ -264,6 +257,26 @@ type TLSConfig struct {
 // Queue describes a queue name
 type Queue struct {
 	Server string
+}
+
+// OCSPUpdaterConfig provides the various window tick times and batch sizes needed
+// for the OCSP (and SCT) updater
+type OCSPUpdaterConfig struct {
+	DBConnect string
+
+	NewCertificateWindow JSONDuration
+	OldOCSPWindow        JSONDuration
+	MissingSCTWindow     JSONDuration
+
+	NewCertificateBatchSize int
+	OldOCSPBatchSize        int
+	MissingSCTBatchSize     int
+
+	OCSPMinTimeToExpiry JSONDuration
+	SCTOldestIssued     JSONDuration
+
+	// DebugAddr is the address to run the /debug handlers on.
+	DebugAddr string
 }
 
 // AppShell contains CLI Metadata

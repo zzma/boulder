@@ -98,7 +98,7 @@
 		},
 		{
 			"ImportPath": "github.com/jmhodges/clock",
-			"Rev": "c560df7e034994569e9742f6e7716c173f6286eb"
+			"Rev": "dc9b5fbbd0b035403add895bd927d456a268082a"
 		},
 		{
 			"ImportPath": "github.com/letsencrypt/go-jose",

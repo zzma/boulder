@@ -7,6 +7,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 
 import startservers
 
@@ -53,7 +54,8 @@ def verify_ocsp_good(certFile, url):
     output = get_ocsp(certFile, url)
     if not re.search(": good", output):
         print "Expected OCSP response 'good', got something else."
-        die(ExitStatus.OCSPFailure)
+        return False
+    return True
 
 def verify_ocsp_revoked(certFile, url):
     output = get_ocsp(certFile, url)
@@ -85,8 +87,17 @@ def run_node_test():
         print("\nIssuing failed")
         die(ExitStatus.NodeFailure)
 
+    # As OCSP-Updater is generating responses indepedantly of the CA we sit in a loop
+    # checking OCSP until we either see a good response or we timeout (5s).
     ee_ocsp_url = "http://localhost:4002"
     issuer_ocsp_url = "http://localhost:4003"
+    timeout = time.time() + 5
+    while True:
+        if verify_ocsp_good(certFile, ee_ocsp_url):
+            break
+        if time.time() > timeout:
+            die(ExitStatus.OCSPFailure)
+        time.sleep(0.25)
     verify_ocsp_good(certFile, ee_ocsp_url)
     # Also verify that the static OCSP responder, which answers with a
     # pre-signed, long-lived response for the CA cert, also works.

@@ -8,11 +8,16 @@ package main
 import (
 	"crypto/x509"
 	"database/sql"
+	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
-	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/codegangsta/cli"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/streadway/amqp"
 	gorp "github.com/letsencrypt/boulder/Godeps/_workspace/src/gopkg.in/gorp.v1"
 
@@ -23,20 +28,82 @@ import (
 	"github.com/letsencrypt/boulder/sa"
 )
 
-// FatalError indicates the updater should stop execution
-type FatalError string
-
-func (e FatalError) Error() string { return string(e) }
-
 // OCSPUpdater contains the useful objects for the Updater
 type OCSPUpdater struct {
 	stats statsd.Statter
 	log   *blog.AuditLogger
-	cac   rpc.CertificateAuthorityClient
+	clk   clock.Clock
+
 	dbMap *gorp.DbMap
+
+	rpcMu *sync.RWMutex
+	cac   core.CertificateAuthority
+	pub   core.Publisher
+
+	// Bits various loops need but don't really fit in the looper struct
+	ocspMinTimeToExpiry time.Duration
+	oldestIssuedSCT     time.Duration
+	numLogs             int
+
+	newCertificatesLoop  *looper
+	oldOCSPResponsesLoop *looper
+	missingReceiptsLoop  *looper
 }
 
-func setupClients(c cmd.Config, stats statsd.Statter) (rpc.CertificateAuthorityClient, chan *amqp.Error) {
+// This is somewhat gross but can be pared down a bit once the publisher and this
+// are fully smooshed together
+func newUpdater(log *blog.AuditLogger, stats statsd.Statter, clk clock.Clock,
+	dbMap *gorp.DbMap, ca core.CertificateAuthority, pub core.Publisher,
+	numLogs int, config cmd.OCSPUpdaterConfig) (*OCSPUpdater, error) {
+	if config.NewCertificateBatchSize == 0 || config.OldOCSPBatchSize == 0 || config.MissingSCTBatchSize == 0 {
+		return nil, fmt.Errorf("Batch sizes must be non-zero")
+	}
+
+	updater := OCSPUpdater{
+		stats:   stats,
+		log:     log,
+		clk:     clk,
+		dbMap:   dbMap,
+		cac:     ca,
+		pub:     pub,
+		numLogs: numLogs,
+		// Stuff we initialize
+		rpcMu: new(sync.RWMutex),
+	}
+
+	// Setup loops
+	updater.newCertificatesLoop = &looper{
+		clk:       clk,
+		stats:     stats,
+		batchSize: config.NewCertificateBatchSize,
+		tickDur:   config.NewCertificateWindow.Duration,
+		tickFunc:  updater.newCertificateTick,
+		name:      "NewCertificates",
+	}
+	updater.oldOCSPResponsesLoop = &looper{
+		clk:       clk,
+		stats:     stats,
+		batchSize: config.OldOCSPBatchSize,
+		tickDur:   config.OldOCSPWindow.Duration,
+		tickFunc:  updater.oldOCSPResponsesTick,
+		name:      "OldOCSPResponses",
+	}
+	updater.missingReceiptsLoop = &looper{
+		clk:       clk,
+		stats:     stats,
+		batchSize: config.MissingSCTBatchSize,
+		tickDur:   config.MissingSCTWindow.Duration,
+		tickFunc:  updater.missingReceiptsTick,
+		name:      "MissingSCTReceipts",
+	}
+
+	updater.ocspMinTimeToExpiry = config.OCSPMinTimeToExpiry.Duration
+	updater.oldestIssuedSCT = config.SCTOldestIssued.Duration
+
+	return &updater, nil
+}
+
+func setupClients(c cmd.Config, stats statsd.Statter) (core.CertificateAuthority, core.Publisher, chan *amqp.Error) {
 	ch, err := rpc.AmqpChannel(c)
 	cmd.FailOnError(err, "Could not connect to AMQP")
 
@@ -48,31 +115,107 @@ func setupClients(c cmd.Config, stats statsd.Statter) (rpc.CertificateAuthorityC
 	cac, err := rpc.NewCertificateAuthorityClient(caRPC)
 	cmd.FailOnError(err, "Unable to create CA client")
 
-	return cac, closeChan
+	pubRPC, err := rpc.NewAmqpRPCClient("OCSP->Publisher", c.AMQP.Publisher.Server, ch, stats)
+	cmd.FailOnError(err, "Unable to create RPC client")
+
+	pubc, err := rpc.NewPublisherClient(pubRPC)
+	cmd.FailOnError(err, "Failed to create Publisher client")
+
+	return cac, pubc, closeChan
 }
 
-func (updater *OCSPUpdater) processResponse(tx *gorp.Transaction, serial string) error {
-	certObj, err := tx.Get(core.Certificate{}, serial)
-	if err != nil {
-		return err
-	}
-	statusObj, err := tx.Get(core.CertificateStatus{}, serial)
-	if err != nil {
-		return err
-	}
+var errNoStaleResponses = errors.New("No stale responses to update")
 
-	cert, ok := certObj.(*core.Certificate)
-	if !ok {
-		return fmt.Errorf("Cast failure")
+func (updater *OCSPUpdater) findStaleOCSPResponses(oldestLastUpdatedTime time.Time, batchSize int) ([]core.Certificate, error) {
+	var certs []core.Certificate
+	_, err := updater.dbMap.Select(
+		&certs,
+		`SELECT cert.*
+		 FROM certificateStatus AS cs
+		 JOIN certificates AS cert
+		 ON cs.serial = cert.serial
+		 WHERE cs.ocspLastUpdated < :lastUpdate
+		 AND cert.expires > now()
+		 ORDER BY cs.ocspLastUpdated ASC
+		 LIMIT :limit`,
+		map[string]interface{}{
+			"lastUpdate": oldestLastUpdatedTime,
+			"limit":      batchSize,
+		},
+	)
+	if err == sql.ErrNoRows || len(certs) == 0 {
+		return certs, errNoStaleResponses
 	}
-	status, ok := statusObj.(*core.CertificateStatus)
-	if !ok {
-		return fmt.Errorf("Cast failure")
+	return certs, err
+}
+
+func (updater *OCSPUpdater) getNumberOfReceipts(serial string) (int, error) {
+	var count int
+	err := updater.dbMap.SelectOne(
+		&count,
+		"SELECT COUNT(*) FROM sctReceipts WHERE certificateSerial = :serial",
+		map[string]interface{}{"serial": serial},
+	)
+	return count, err
+}
+
+var errNoNewCertificates = errors.New("No certificates issued since last check")
+
+func (updater *OCSPUpdater) getCertificatesIssuedSince(since time.Time, batchSize int) ([]core.Certificate, error) {
+	var certs []core.Certificate
+	_, err := updater.dbMap.Select(
+		&certs,
+		`SELECT * FROM certificates
+		 WHERE issued > :since
+		 LIMIT :limit`,
+		map[string]interface{}{
+			"since": since,
+			"limit": batchSize,
+		},
+	)
+	if err == sql.ErrNoRows || len(certs) == 0 {
+		return certs, errNoNewCertificates
+	}
+	return certs, err
+}
+
+func (updater *OCSPUpdater) getSerialsIssuedSince(since time.Time, batchSize int) ([]string, error) {
+	var serials []string
+	_, err := updater.dbMap.Select(
+		&serials,
+		`SELECT serial FROM certificates
+		 WHERE issued > :since
+		 LIMIT :limit`,
+		map[string]interface{}{
+			"since": since,
+			"limit": batchSize,
+		},
+	)
+	if err == sql.ErrNoRows || len(serials) == 0 {
+		return serials, errNoNewCertificates
+	}
+	return serials, err
+}
+
+type responseMeta struct {
+	*core.OCSPResponse
+	*core.CertificateStatus
+}
+
+func (updater *OCSPUpdater) generateResponse(cert core.Certificate) (responseMeta, error) {
+	var status core.CertificateStatus
+	err := updater.dbMap.SelectOne(
+		&status,
+		"SELECT * FROM certificateStatus WHERE serial = :serial",
+		map[string]interface{}{"serial": cert.Serial},
+	)
+	if err != nil {
+		return responseMeta{}, err
 	}
 
 	_, err = x509.ParseCertificate(cert.DER)
 	if err != nil {
-		return err
+		return responseMeta{}, err
 	}
 
 	signRequest := core.OCSPSigningRequest{
@@ -84,21 +227,24 @@ func (updater *OCSPUpdater) processResponse(tx *gorp.Transaction, serial string)
 
 	ocspResponse, err := updater.cac.GenerateOCSP(signRequest)
 	if err != nil {
-		return err
+		return responseMeta{}, err
 	}
 
-	timeStamp := time.Now()
+	timestamp := updater.clk.Now()
+	status.OCSPLastUpdated = timestamp
+	ocspResp := &core.OCSPResponse{Serial: cert.Serial, CreatedAt: timestamp, Response: ocspResponse}
+	return responseMeta{ocspResp, &status}, nil
+}
 
+func (updater *OCSPUpdater) storeResponse(tx *gorp.Transaction, meta responseMeta) error {
 	// Record the response.
-	ocspResp := &core.OCSPResponse{Serial: serial, CreatedAt: timeStamp, Response: ocspResponse}
-	err = tx.Insert(ocspResp)
+	err := tx.Insert(meta.OCSPResponse)
 	if err != nil {
 		return err
 	}
 
 	// Reset the update clock
-	status.OCSPLastUpdated = timeStamp
-	_, err = tx.Update(status)
+	_, err = tx.Update(meta.CertificateStatus)
 	if err != nil {
 		return err
 	}
@@ -107,96 +253,167 @@ func (updater *OCSPUpdater) processResponse(tx *gorp.Transaction, serial string)
 	return nil
 }
 
-// Produce one OCSP response for the given serial, returning err
-// if anything went wrong. This method will open and commit a transaction.
-func (updater *OCSPUpdater) updateOneSerial(serial string) error {
-	innerStart := time.Now()
-	// Each response gets a transaction. In the future we can increase
-	// performance by batching transactions.
-	// The key thing to think through is the cost of rollbacks, and whether
-	// we should rollback if CA/HSM fails to sign the response or only
-	// upon a partial DB insert.
-	tx, err := updater.dbMap.Begin()
-	if err != nil {
-		updater.log.Err(fmt.Sprintf("OCSP %s: Error starting transaction, aborting: %s", serial, err))
-		updater.stats.Inc("OCSP.Updates.Failed", 1, 1.0)
-		tx.Rollback()
-		// Failure to begin transaction is a fatal error.
-		return FatalError(err.Error())
+func (updater *OCSPUpdater) newCertificateTick(batchSize int, _, prev time.Time) {
+	updater.rpcMu.RLock()
+
+	// Check for anything issued between now and previous tick and generate the
+	// OCSP responses and submit them to CT logs using the Publisher
+	certs, err := updater.getCertificatesIssuedSince(prev, batchSize)
+	if err != nil && err != errNoNewCertificates {
+		updater.rpcMu.RUnlock()
+		return
 	}
 
-	if err := updater.processResponse(tx, serial); err != nil {
-		updater.log.Err(fmt.Sprintf("OCSP %s: Could not process OCSP Response, skipping: %s", serial, err))
-		updater.stats.Inc("OCSP.Updates.Failed", 1, 1.0)
-		tx.Rollback()
-		return err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		updater.log.Err(fmt.Sprintf("OCSP %s: Error committing transaction, skipping: %s", serial, err))
-		updater.stats.Inc("OCSP.Updates.Failed", 1, 1.0)
-		tx.Rollback()
-		return err
-	}
-
-	updater.log.Info(fmt.Sprintf("OCSP %s: OK", serial))
-	updater.stats.Inc("OCSP.Updates.Processed", 1, 1.0)
-	updater.stats.TimingDuration("OCSP.Updates.UpdateLatency", time.Since(innerStart), 1.0)
-	return nil
-}
-
-// findStaleResponses opens a transaction and processes up to responseLimit
-// responses in a single batch. The responseLimit should be relatively small,
-// so as to limit the chance of the transaction failing due to concurrent
-// updates.
-func (updater *OCSPUpdater) findStaleResponses(oldestLastUpdatedTime time.Time, responseLimit int) error {
-	var certificateStatus []core.CertificateStatus
-	_, err := updater.dbMap.Select(&certificateStatus,
-		`SELECT cs.* FROM certificateStatus AS cs JOIN certificates AS cert ON cs.serial = cert.serial
-		 WHERE cs.ocspLastUpdated < ? AND cert.expires > now()
-		 ORDER BY cs.ocspLastUpdated ASC
-		 LIMIT ?`, oldestLastUpdatedTime, responseLimit)
-
-	if err == sql.ErrNoRows {
-		updater.log.Info("All up to date. No OCSP responses needed.")
-	} else if err != nil {
-		updater.log.Err(fmt.Sprintf("Error loading certificate status: %s", err))
-	} else {
-		updater.log.Info(fmt.Sprintf("Processing OCSP Responses...\n"))
-		outerStart := time.Now()
-
-		for i, status := range certificateStatus {
-			updater.log.Debug(fmt.Sprintf("OCSP %s: (%d/%d)", status.Serial, i, responseLimit))
-
-			err = updater.updateOneSerial(status.Serial)
-			// Abort if we recieve a fatal error
-			if _, ok := err.(FatalError); ok {
-				return err
+	// Do OCSP response generation / CT submission in parallel
+	wg := new(sync.WaitGroup)
+	updater.generateOCSPResponses(wg, certs)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, cert := range certs {
+			err = updater.pub.SubmitToCT(cert.DER)
+			if err != nil {
+				updater.log.AuditErr(err)
+				continue
 			}
 		}
+	}()
 
-		updater.stats.TimingDuration("OCSP.Updates.BatchLatency", time.Since(outerStart), 1.0)
-		updater.stats.Inc("OCSP.Updates.BatchesProcessed", 1, 1.0)
+	wg.Wait()
+	updater.rpcMu.RUnlock()
+}
+
+func (updater *OCSPUpdater) missingReceiptsTick(batchSize int, now, _ time.Time) {
+	updater.rpcMu.RLock()
+
+	since := now.Add(-updater.oldestIssuedSCT)
+	serials, err := updater.getSerialsIssuedSince(since, batchSize)
+	if err != nil && err != errNoNewCertificates {
+		updater.log.AuditErr(err)
+		updater.rpcMu.RUnlock()
+		return
 	}
 
-	return err
+	for _, serial := range serials {
+		// TODO(rolandshoemaker): For now this will do, in the future we should
+		// really have another method that allows us to specify which log/s should
+		// be submitted to so we don't double submit to logs we already have receipts
+		// for
+		if count, err := updater.getNumberOfReceipts(serial); err == nil && count != updater.numLogs {
+			var certDER []byte
+			updater.dbMap.SelectOne(
+				&certDER,
+				`SELECT der FROM certificates
+					 WHERE serial = :serial`,
+				map[string]interface{}{"serial": serial},
+			)
+			if err != nil {
+				updater.log.AuditErr(err)
+				continue
+			}
+
+			err = updater.pub.SubmitToCT(certDER)
+			if err != nil {
+				updater.log.AuditErr(err)
+				continue
+			}
+		} else if err != nil {
+			updater.log.AuditErr(err)
+			continue
+		}
+	}
+
+	updater.rpcMu.RUnlock()
+}
+
+func (updater *OCSPUpdater) generateOCSPResponses(wg *sync.WaitGroup, certs []core.Certificate) {
+	responseChan := make(chan responseMeta)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, cert := range certs {
+			meta, err := updater.generateResponse(cert)
+			if err != nil {
+				updater.log.AuditErr(err)
+				continue
+			}
+			responseChan <- meta
+		}
+		close(responseChan)
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tx, err := updater.dbMap.Begin()
+		if err != nil {
+			updater.log.AuditErr(err)
+			return
+		}
+		for meta := range responseChan {
+			err = updater.storeResponse(tx, meta)
+			if err != nil {
+				updater.log.AuditErr(err)
+				tx.Rollback()
+				return
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			updater.log.AuditErr(err)
+			return
+		}
+	}()
+
+	return
+}
+
+func (updater *OCSPUpdater) oldOCSPResponsesTick(batchSize int, now, _ time.Time) {
+	updater.rpcMu.RLock()
+
+	certs, err := updater.findStaleOCSPResponses(now.Add(-updater.ocspMinTimeToExpiry), batchSize)
+	if err != nil && err != errNoStaleResponses {
+		updater.stats.Inc("OCSP.Updates.Failed", 1, 1.0)
+		updater.log.AuditErr(err)
+		updater.rpcMu.RUnlock()
+		return
+	}
+
+	wg := new(sync.WaitGroup)
+	updater.generateOCSPResponses(wg, certs)
+	wg.Wait()
+	updater.rpcMu.RUnlock()
+}
+
+type looper struct {
+	clk       clock.Clock
+	stats     statsd.Statter
+	batchSize int
+	tickDur   time.Duration
+	tickFunc  func(int, time.Time, time.Time)
+	name      string
+}
+
+func (l *looper) loop() {
+	prev := l.clk.Now().Add(-l.tickDur)
+	for {
+		now := l.clk.Now()
+		l.tickFunc(l.batchSize, now, prev)
+		l.stats.TimingDuration(fmt.Sprintf("OCSP.%s.TickDuration", l.name), time.Since(now), 1.0)
+		// If the tick didn't take as long as expected sleep for the difference
+		if diff := l.clk.Now().Sub(now.Add(l.tickDur)); diff > 0 {
+			l.stats.Inc(fmt.Sprintf("OCSP.%s.ShortTicks", l.name), 1, 1.0)
+			l.clk.Sleep(diff)
+		} else if diff < (-2 * l.tickDur) {
+			l.stats.Inc(fmt.Sprintf("OCSP.%s.LongTicks", l.name), 1, 1.0)
+		} else {
+			l.stats.Inc(fmt.Sprintf("OCSP.%s.NormalTicks", l.name), 1, 1.0)
+		}
+		prev = now
+	}
 }
 
 func main() {
 	app := cmd.NewAppShell("ocsp-updater", "Generates and updates OCSP responses")
-
-	app.App.Flags = append(app.App.Flags, cli.IntFlag{
-		Name:   "limit",
-		Value:  100,
-		EnvVar: "OCSP_LIMIT",
-		Usage:  "Count of responses to process per run",
-	})
-
-	app.Config = func(c *cli.Context, config cmd.Config) cmd.Config {
-		config.OCSPUpdater.ResponseLimit = c.GlobalInt("limit")
-		return config
-	}
 
 	app.Action = func(c cmd.Config) {
 		// Set up logging
@@ -212,49 +429,64 @@ func main() {
 		blog.SetAuditLogger(auditlogger)
 
 		go cmd.DebugServer(c.OCSPUpdater.DebugAddr)
+		go cmd.ProfileCmd("OCSP-Updater", stats)
 
 		// Configure DB
 		dbMap, err := sa.NewDbMap(c.OCSPUpdater.DBConnect)
 		cmd.FailOnError(err, "Could not connect to database")
 
-		cac, closeChan := setupClients(c, stats)
+		cac, pubc, closeChan := setupClients(c, stats)
 
-		go func() {
-			// Abort if we disconnect from AMQP
-			for {
-				for err := range closeChan {
-					auditlogger.Warning(fmt.Sprintf(" [!] AMQP Channel closed, aborting early: [%s]", err))
-					panic(err)
-				}
-			}
-		}()
+		updater, err := newUpdater(
+			auditlogger,
+			stats,
+			clock.Default(),
+			dbMap,
+			cac,
+			pubc,
+			// Necessary evil for now
+			len(c.Publisher.CT.Logs),
+			c.OCSPUpdater,
+		)
+		cmd.FailOnError(err, "Failed to create updater")
 
 		auditlogger.Info(app.VersionString())
 
-		updater := &OCSPUpdater{
-			cac:   cac,
-			dbMap: dbMap,
-			stats: stats,
-			log:   auditlogger,
-		}
+		// Handle AMQP disconnections gracefully (and block other operations while
+		// disconnected...)
+		go func() {
+			for {
+				err := <-closeChan
+				auditlogger.Warning(fmt.Sprintf(" [!] AMQP Channel closed, will reconnect in 5 seconds: [%s]", err))
+				time.Sleep(5 * time.Second)
+				updater.rpcMu.Lock()
+				updater.cac, updater.pub, closeChan = setupClients(c, stats)
+				updater.rpcMu.Unlock()
+				auditlogger.Info(" [!] Reconnected to AMQP Channel")
+			}
+		}()
 
-		// Calculate the cut-off timestamp
-		if c.OCSPUpdater.MinTimeToExpiry == "" {
-			panic("Config must specify a MinTimeToExpiry period.")
-		}
-		dur, err := time.ParseDuration(c.OCSPUpdater.MinTimeToExpiry)
-		cmd.FailOnError(err, "Could not parse MinTimeToExpiry from config.")
+		go updater.newCertificatesLoop.loop()
+		go updater.oldOCSPResponsesLoop.loop()
+		go updater.missingReceiptsLoop.loop()
 
-		oldestLastUpdatedTime := time.Now().Add(-dur)
-		auditlogger.Info(fmt.Sprintf("Searching for OCSP responses older than %s", oldestLastUpdatedTime))
+		// Catch INT/TERM/HUP signals and exit after work is done
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGTERM)
+		signal.Notify(sigChan, syscall.SIGINT)
+		signal.Notify(sigChan, syscall.SIGHUP)
 
-		// When we choose to batch responses, it may be best to restrict count here,
-		// change the transaction to survive the whole findStaleResponses, and to
-		// loop this method call however many times is appropriate.
-		err = updater.findStaleResponses(oldestLastUpdatedTime, c.OCSPUpdater.ResponseLimit)
-		if err != nil {
-			auditlogger.WarningErr(err)
-		}
+		// Block until signalled
+		<-sigChan
+		signal.Stop(sigChan)
+		auditlogger.Info(" [!] Caught signal, finishing work in progress")
+
+		// We can only acquire a write lock if all read locks have been relinquished so
+		// we wait until then before exiting (this is a bit janky and could probably be
+		// done better with a WaitGroup and closing channels, but it also helps with restarting
+		// so uh... idk)
+		updater.rpcMu.Lock()
+		return
 	}
 
 	app.Run()
