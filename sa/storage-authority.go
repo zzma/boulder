@@ -6,6 +6,7 @@
 package sa
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
 	"database/sql"
@@ -119,6 +120,8 @@ func updateChallenges(authID string, challenges []core.Challenge, tx *gorp.Trans
 	return nil
 }
 
+const NoSuchRegistrationError = core.NoSuchRegistrationError("no registration found")
+
 // GetRegistration obtains a Registration by ID
 func (ssa *SQLStorageAuthority) GetRegistration(id int64) (core.Registration, error) {
 	regObj, err := ssa.dbMap.Get(regModel{}, id)
@@ -126,8 +129,7 @@ func (ssa *SQLStorageAuthority) GetRegistration(id int64) (core.Registration, er
 		return core.Registration{}, err
 	}
 	if regObj == nil {
-		msg := fmt.Sprintf("No registrations with ID %d", id)
-		return core.Registration{}, core.NoSuchRegistrationError(msg)
+		return core.Registration{}, NoSuchRegistrationError
 	}
 	regPtr, ok := regObj.(*regModel)
 	if !ok {
@@ -146,11 +148,24 @@ func (ssa *SQLStorageAuthority) GetRegistrationByKey(key jose.JsonWebKey) (core.
 	err = ssa.dbMap.SelectOne(reg, "SELECT * FROM registrations WHERE jwk_sha256 = :key", map[string]interface{}{"key": sha})
 
 	if err == sql.ErrNoRows {
-		msg := fmt.Sprintf("No registrations with public key sha256 %s", sha)
-		return core.Registration{}, core.NoSuchRegistrationError(msg)
+		return core.Registration{}, NoSuchRegistrationError
 	}
 	if err != nil {
 		return core.Registration{}, err
+	}
+
+	// Do an extra careful check that the full keys, not just the digests, are
+	// equal.
+	requestedKeyDER, err := x509.MarshalPKIXPublicKey(key.Key)
+	if err != nil {
+		return core.Registration{}, err
+	}
+	storedKeyDER, err := x509.MarshalPKIXPublicKey(reg.Key)
+	if err != nil {
+		return core.Registration{}, err
+	}
+	if !bytes.Equal(requestedKeyDER, storedKeyDER) {
+		return core.Registration{}, core.NoSuchRegistrationError(fmt.Sprintf("WHOA\n%s\n vs \n%s", requestedKeyDER, storedKeyDER))
 	}
 
 	return modelToRegistration(reg)
@@ -389,8 +404,7 @@ func (ssa *SQLStorageAuthority) UpdateRegistration(reg core.Registration) error 
 		return err
 	}
 	if n == 0 {
-		msg := fmt.Sprintf("Requested registration not found %v", reg.ID)
-		return core.NoSuchRegistrationError(msg)
+		return NoSuchRegistrationError
 	}
 
 	return nil
