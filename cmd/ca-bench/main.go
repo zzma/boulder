@@ -225,7 +225,9 @@ func main() {
 		ch, err := rpc.AmqpChannel(config)
 		cmd.FailOnError(err, "Could not connect to AMQP")
 
-		stats, _ := statsd.NewNoopClient(nil)
+		stats, err := statsd.NewClient(config.Statsd.Server, config.Statsd.Prefix)
+		cmd.FailOnError(err, "Couldn't connect to statsd")
+
 		caRPC, err := rpc.NewAmqpRPCClient("Bencher->CA", config.AMQP.CA.Server, ch, stats)
 		cmd.FailOnError(err, "Unable to create RPC client")
 
