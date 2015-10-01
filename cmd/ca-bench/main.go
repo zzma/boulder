@@ -53,6 +53,7 @@ type bencher struct {
 	statsStop chan bool
 
 	statsInterval time.Duration
+	hideStats     bool
 }
 
 func (b *bencher) updateStats() {
@@ -78,16 +79,18 @@ func (b *bencher) updateStats() {
 				b.peakOCSPSigningRate = ocspRate
 			}
 
-			fmt.Printf(
-				"issuances: %d (rate: %3.2f/s, errors: %d), ocsp signings: %d (rate: %3.2f/s, errors: %d), total rate: %3.2f/s\n",
-				totalIssuances,
-				certRate,
-				atomic.LoadInt64(&b.issuancesErrors),
-				totalOCSPSignings,
-				ocspRate,
-				atomic.LoadInt64(&b.ocspSigningErrors),
-				certRate+ocspRate,
-			)
+			if !b.hideStats {
+				fmt.Printf(
+					"issuances: %d (rate: %3.2f/s, errors: %d), ocsp signings: %d (rate: %3.2f/s, errors: %d), total rate: %3.2f/s\n",
+					totalIssuances,
+					certRate,
+					atomic.LoadInt64(&b.issuancesErrors),
+					totalOCSPSignings,
+					ocspRate,
+					atomic.LoadInt64(&b.ocspSigningErrors),
+					certRate+ocspRate,
+				)
+			}
 		}
 	}
 }
@@ -195,6 +198,10 @@ func main() {
 			Usage: "Stats calculation/printing interval suffixed with s, m, or h",
 			Value: "5s",
 		},
+		cli.BoolFlag{
+			Name:  "hideStats",
+			Usage: "Hides in progress stats, information about the run will still be printed at exit",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
@@ -268,6 +275,7 @@ func main() {
 			},
 			statsStop:     make(chan bool, 1),
 			statsInterval: statsInterval,
+			hideStats:     c.GlobalBool("hideStats"),
 		}
 
 		b.run()
