@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cloudflare/cfssl/helpers"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/codegangsta/cli"
 
@@ -202,6 +203,14 @@ func main() {
 			Name:  "hideStats",
 			Usage: "Hides in progress stats, information about the run will still be printed at exit",
 		},
+		cli.StringFlag{
+			Name:  "issuerKeyPath",
+			Usage: "Path to correct issuer key to use for generating certificates and ocsp requests",
+		},
+		cli.StringFlag{
+			Name:  "issuerPath",
+			Usage: "Path to correct issuer cert to use for generating certificates and ocsp requests",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
@@ -223,7 +232,25 @@ func main() {
 		cac, err := rpc.NewCertificateAuthorityClient(caRPC)
 		cmd.FailOnError(err, "Unable to create CA client")
 
-		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		issuerPath := c.GlobalString("issuerPath")
+		if issuerPath == "" {
+			fmt.Println("issuerPath is required")
+			return
+		}
+		issuerKeyPath := c.GlobalString("issuerKeyPath")
+		if issuerKeyPath == "" {
+			fmt.Println("issuerKeyPath is required")
+			return
+		}
+
+		issuer, err := core.LoadCert(issuerPath)
+		cmd.FailOnError(err, "Failed to load issuer certificate")
+		var keyBytes []byte
+		keyBytes, err = ioutil.ReadFile(issuerKeyPath)
+		cmd.FailOnError(err, "Failed to read issuer key")
+		issuerKeyObj, err := helpers.ParsePrivateKeyPEM(keyBytes)
+		cmd.FailOnError(err, "Failed to parse issuer key")
+		issuerKey := issuerKeyObj.(*rsa.PrivateKey)
 
 		csrDER, err := x509.CreateCertificateRequest(
 			rand.Reader,
@@ -231,7 +258,7 @@ func main() {
 				Subject:  pkix.Name{CommonName: "wat.com"},
 				DNSNames: []string{"wat.com"},
 			},
-			key,
+			issuerKey,
 		)
 		csr, err := x509.ParseCertificateRequest(csrDER)
 		cmd.FailOnError(err, "Failed to parse generated CSR")
@@ -247,7 +274,7 @@ func main() {
 		cmd.FailOnError(err, "Failed to generate random serial number")
 		template.SerialNumber = serialNumber
 
-		certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+		certDER, err := x509.CreateCertificate(rand.Reader, template, issuer, &issuerKey.PublicKey, issuerKey)
 		cmd.FailOnError(err, "Failed to generate test certificate")
 		cert, err := x509.ParseCertificate(certDER)
 		cmd.FailOnError(err, "Failed to parse test certificate")
@@ -265,7 +292,7 @@ func main() {
 
 		b := bencher{
 			cac:         cac,
-			key:         key,
+			key:         issuerKey,
 			certSenders: issuanceSenders,
 			ocspSenders: ocspSenders,
 			csr:         *csr,
