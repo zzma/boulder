@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -24,35 +23,29 @@ import (
 	"github.com/letsencrypt/boulder/rpc"
 )
 
+// So many things on this struct... but this is just for benchmarking? ._.
 type bencher struct {
 	cac core.CertificateAuthority
 
-	certSenders int
+	// Pregenerated CSR and OCSP signing request for calls
 	csr         x509.CertificateRequest
-
-	ocspSenders int
 	ocspRequest core.OCSPSigningRequest
 
-	key crypto.PrivateKey
-
-	started time.Time
-
-	totalIssuances    int64
-	issuances         int64
-	issuancesErrors   int64
-	totalOCSPSignings int64
-	ocspSignings      int64
-	ocspSigningErrors int64
-
+	// Metadeta for generating stats
+	started             time.Time
+	totalIssuances      int64
 	peakIssuanceRate    float64
+	issuances           int64
+	issuancesErrors     int64
+	totalOCSPSignings   int64
 	peakOCSPSigningRate float64
+	ocspSignings        int64
+	ocspSigningErrors   int64
 
-	signReqs chan core.OCSPSigningRequest
-
-	stopWG    *sync.WaitGroup
-	stopChans []chan bool
-	statsStop chan bool
-
+	// Stats worker state
+	stopWG        *sync.WaitGroup
+	stopChans     []chan bool
+	statsStop     chan bool
 	statsInterval time.Duration
 	hideStats     bool
 }
@@ -64,9 +57,10 @@ func (b *bencher) updateStats() {
 		case <-b.statsStop:
 			return
 		default:
+			// Do the switcheroo
 			totalIssuances := atomic.AddInt64(&b.totalIssuances, atomic.LoadInt64(&b.issuances))
-			totalOCSPSignings := atomic.AddInt64(&b.totalOCSPSignings, atomic.LoadInt64(&b.ocspSignings))
 			atomic.StoreInt64(&b.issuances, 0)
+			totalOCSPSignings := atomic.AddInt64(&b.totalOCSPSignings, atomic.LoadInt64(&b.ocspSignings))
 			atomic.StoreInt64(&b.ocspSignings, 0)
 
 			secsSince := float64(time.Since(b.started).Seconds())
@@ -109,15 +103,16 @@ func (b *bencher) sendGenerateOCSP() {
 	_, err := b.cac.GenerateOCSP(b.ocspRequest)
 	if err != nil {
 		atomic.AddInt64(&b.ocspSigningErrors, 1)
+		return
 	}
 	atomic.AddInt64(&b.ocspSignings, 1)
 }
 
-func (b *bencher) run() {
+func (b *bencher) run(certSenders, ocspSenders int) {
 	b.started = time.Now()
 	b.stopWG = new(sync.WaitGroup)
 	go b.updateStats()
-	for i := 0; i < b.certSenders; i++ {
+	for i := 0; i < certSenders; i++ {
 		b.stopWG.Add(1)
 		stopChan := make(chan bool, 1)
 		go func() {
@@ -133,7 +128,7 @@ func (b *bencher) run() {
 		}()
 		b.stopChans = append(b.stopChans, stopChan)
 	}
-	for i := 0; i < b.ocspSenders; i++ {
+	for i := 0; i < ocspSenders; i++ {
 		b.stopWG.Add(1)
 		stopChan := make(chan bool, 1)
 		go func() {
@@ -191,8 +186,8 @@ func main() {
 			Usage: "Number of goroutines sending ca.GenerateOCSP RPc calls",
 		},
 		cli.StringFlag{
-			Name:  "runtime",
-			Usage: "Runtime suffixed with s, m, or h",
+			Name:  "benchTime",
+			Usage: "Time to run for suffixed with s, m, or h",
 		},
 		cli.StringFlag{
 			Name:  "statsInterval",
@@ -235,13 +230,9 @@ func main() {
 		cmd.FailOnError(err, "Unable to create CA client")
 
 		issuerPath := c.GlobalString("issuerPath")
-		if issuerPath == "" {
-			fmt.Println("issuerPath is required")
-			return
-		}
 		issuerKeyPath := c.GlobalString("issuerKeyPath")
-		if issuerKeyPath == "" {
-			fmt.Println("issuerKeyPath is required")
+		if issuerPath == "" || issuerKeyPath == "" {
+			fmt.Println("Both issuerPath and issuerKeyPath are required")
 			return
 		}
 
@@ -293,11 +284,8 @@ func main() {
 		cmd.FailOnError(err, "Failed to parse statsInterval")
 
 		b := bencher{
-			cac:         cac,
-			key:         issuerKey,
-			certSenders: issuanceSenders,
-			ocspSenders: ocspSenders,
-			csr:         *csr,
+			cac: cac,
+			csr: *csr,
 			ocspRequest: core.OCSPSigningRequest{
 				CertDER: cert.Raw,
 				Status:  string(core.OCSPStatusGood),
@@ -307,16 +295,16 @@ func main() {
 			hideStats:     c.GlobalBool("hideStats"),
 		}
 
-		b.run()
+		b.run(issuanceSenders, ocspSenders)
 
-		runtimeStr := c.GlobalString("runtime")
+		runtimeStr := c.GlobalString("benchTime")
 		if runtimeStr == "" {
 			fmt.Println("Running indefinitely")
 			forever := make(chan bool)
 			<-forever
 		}
 		runtime, err := time.ParseDuration(runtimeStr)
-		cmd.FailOnError(err, "Failed to parse runtime")
+		cmd.FailOnError(err, "Failed to parse benchTime")
 		fmt.Printf("Running for (approximately) %s\n", runtime)
 
 		time.Sleep(runtime)
