@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -169,11 +170,12 @@ type AmqpRPCServer struct {
 	connected         bool
 	done              bool
 	dMu               sync.Mutex
+	maxGoroutines     int
 }
 
 // NewAmqpRPCServer creates a new RPC server for the given queue and will begin
 // consuming requests from the queue. To start the server you must call Start().
-func NewAmqpRPCServer(serverQueue string, handler func(*AmqpRPCServer)) (*AmqpRPCServer, error) {
+func NewAmqpRPCServer(serverQueue string, handler func(*AmqpRPCServer), maxGoroutines int) (*AmqpRPCServer, error) {
 	log := blog.GetAuditLogger()
 	b := make([]byte, 4)
 	_, err := rand.Read(b)
@@ -187,6 +189,7 @@ func NewAmqpRPCServer(serverQueue string, handler func(*AmqpRPCServer)) (*AmqpRP
 		dispatchTable:     make(map[string]func([]byte) ([]byte, error)),
 		connectionHandler: handler,
 		consumerName:      consumerName,
+		maxGoroutines:     maxGoroutines,
 	}, nil
 }
 
@@ -407,6 +410,9 @@ func (rpc *AmqpRPCServer) Start(c cmd.Config) error {
 			select {
 			case msg, ok := <-msgs:
 				if ok {
+					for rpc.maxGoroutines != 0 && rpc.maxGoroutines > runtime.NumGoroutine() {
+						time.Sleep(50 * time.Millisecond)
+					}
 					go rpc.processMessage(msg)
 				} else {
 					// chan has been closed by rpc.channel.Cancel
