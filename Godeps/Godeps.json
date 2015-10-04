@@ -113,6 +113,10 @@
 			"Rev": "88c9f842544e629ec046105d7fb50d5daafae737"
 		},
 		{
+			"ImportPath": "github.com/rolandshoemaker/hdrhistogram",
+			"Rev": "16ec42a19afc9e3a02ca5265e784c00edfd3b826"
+		},
+		{
 			"ImportPath": "github.com/square/go-jose/cipher",
 			"Rev": "2f4e4fff85a98acc176ac2712c31394ac1acb7e8"
 		},
