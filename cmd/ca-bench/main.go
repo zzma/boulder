@@ -119,10 +119,10 @@ func (b *bencher) sendGenerateOCSP() {
 	b.ocspLatency.RecordValue(int64(time.Since(s) / time.Millisecond))
 	if err != nil {
 		if err.Error() == "AMQP-RPC timeout" {
-			fmt.Printf("OCSP error: %s\n", err)
 			atomic.AddInt64(&b.ocspSigningTimeouts, 1)
 			return
 		}
+		fmt.Printf("OCSP error: %s\n", err)
 		atomic.AddInt64(&b.ocspSigningErrors, 1)
 		return
 	}
