@@ -14,28 +14,17 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"text/tabwriter"
 	"time"
 
-	"github.com/codahale/hdrhistogram"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cloudflare/cfssl/helpers"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/codegangsta/cli"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/rolandshoemaker/hdrhistogram"
 
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/rpc"
 )
-
-func printRate(brackets []hdrhistogram.Bracket) {
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintln(w, "Value\tPercentile\tTotalCount\t1/1(1-Percentile)")
-	for _, bracket := range brackets {
-		fmt.Fprintf(w, "%d\t%.5f\t%d\t%.2f\n", bracket.ValueAt, bracket.Quantile/100, bracket.Count, 1.0/(1.0-(bracket.Quantile/100)))
-	}
-	w.Flush()
-}
 
 // So many things on this struct... but this is just for benchmarking? ._.
 type bencher struct {
@@ -53,10 +42,12 @@ type bencher struct {
 	ocspLatency     *hdrhistogram.Histogram
 
 	// Running totals
-	issuances         int64
-	issuanceErrors    int64
-	ocspSignings      int64
-	ocspSigningErrors int64
+	issuances           int64
+	issuanceErrors      int64
+	issuanceTimeouts    int64
+	ocspSignings        int64
+	ocspSigningErrors   int64
+	ocspSigningTimeouts int64
 
 	// Stats worker state
 	stopWG        *sync.WaitGroup
@@ -77,21 +68,28 @@ func (b *bencher) updateStats() {
 		default:
 			if !b.hideStats {
 				issuances := b.issuanceLatency.TotalCount()
-				ocspSignings := b.ocspLatency.TotalCount()
 				issuanceErrors := atomic.LoadInt64(&b.issuanceErrors)
+				issuanceTimeouts := atomic.LoadInt64(&b.issuanceTimeouts)
+				ocspSignings := b.ocspLatency.TotalCount()
 				ocspSigningErrors := atomic.LoadInt64(&b.ocspSigningErrors)
+				ocspSigningTimeouts := atomic.LoadInt64(&b.ocspSigningTimeouts)
+
+				issuances -= (issuanceErrors + issuanceTimeouts)
+				ocspSignings -= (ocspSigningErrors + ocspSigningTimeouts)
 
 				certRate := float64(issuances) / time.Since(b.started).Seconds()
 				ocspRate := float64(ocspSignings) / time.Since(b.started).Seconds()
 
 				fmt.Printf(
-					"issuances: %d (avg rate: %3.2f/s, errors: %d), ocsp signings: %d (avg rate: %3.2f/s, errors: %d)\n",
+					"issuances: %d (avg rate: %3.2f/s, errors: %d, timeouts: %d), ocsp signings: %d (avg rate: %3.2f/s, errors: %d, timeouts: %d)\n",
 					issuances,
 					certRate,
 					issuanceErrors,
+					issuanceTimeouts,
 					ocspSignings,
 					ocspRate,
 					ocspSigningErrors,
+					ocspSigningTimeouts,
 				)
 			}
 		}
@@ -102,8 +100,13 @@ func (b *bencher) sendIssueCertificate() {
 	s := time.Now()
 	_, err := b.cac.IssueCertificate(b.csr, 1)
 	b.issuanceLatency.RecordValue(int64(time.Since(s) / time.Millisecond))
+	// b.issuanceLatency.RecordCorrectedValue(int64(time.Since(s)/time.Millisecond), int64(b.issuanceLatency.Mean()))
 	if err != nil {
-		fmt.Println(err)
+		if err.Error() == "AMQP-RPC timeout" {
+			atomic.AddInt64(&b.issuanceTimeouts, 1)
+			return
+		}
+		fmt.Printf("Issuance error: %s\n", err)
 		atomic.AddInt64(&b.issuanceErrors, 1)
 		return
 	}
@@ -115,48 +118,69 @@ func (b *bencher) sendGenerateOCSP() {
 	_, err := b.cac.GenerateOCSP(b.ocspRequest)
 	b.ocspLatency.RecordValue(int64(time.Since(s) / time.Millisecond))
 	if err != nil {
+		if err.Error() == "AMQP-RPC timeout" {
+			fmt.Printf("OCSP error: %s\n", err)
+			atomic.AddInt64(&b.ocspSigningTimeouts, 1)
+			return
+		}
 		atomic.AddInt64(&b.ocspSigningErrors, 1)
 		return
 	}
 	atomic.AddInt64(&b.ocspSignings, 1)
 }
 
-func (b *bencher) run(certSenders, ocspSenders int) {
+func (b *bencher) serialSender(action func(), maxSenders int64) {
+	workers := int64(0)
+	stopChan := make(chan bool, 1)
+	b.stopChans = append(b.stopChans, stopChan)
+	for {
+		select {
+		case <-stopChan:
+			return
+		default:
+			if atomic.LoadInt64(&workers) < maxSenders {
+				atomic.AddInt64(&workers, 1)
+				go func() {
+					defer atomic.AddInt64(&workers, -1)
+					action()
+				}()
+			}
+		}
+	}
+}
+
+func (b *bencher) runSerial(maxIssuance int, maxOCSP int) {
 	b.started = time.Now()
 	b.stopWG = new(sync.WaitGroup)
 	go b.updateStats()
-	for i := 0; i < certSenders; i++ {
-		b.stopWG.Add(1)
-		stopChan := make(chan bool, 1)
+	go b.serialSender(b.sendIssueCertificate, int64(maxIssuance))
+	go b.serialSender(b.sendGenerateOCSP, int64(maxOCSP))
+}
+
+func (b *bencher) asyncSetupSender(action func(), throughput int) {
+	for i := 0; i < throughput; i++ {
 		go func() {
-			defer b.stopWG.Done()
+			stopChan := make(chan bool, 1)
+			b.stopChans = append(b.stopChans, stopChan)
 			for {
 				select {
 				case <-stopChan:
 					return
 				default:
-					b.sendIssueCertificate()
+					go action()
+					time.Sleep(time.Second)
 				}
 			}
 		}()
-		b.stopChans = append(b.stopChans, stopChan)
 	}
-	for i := 0; i < ocspSenders; i++ {
-		b.stopWG.Add(1)
-		stopChan := make(chan bool, 1)
-		go func() {
-			defer b.stopWG.Done()
-			for {
-				select {
-				case <-stopChan:
-					return
-				default:
-					b.sendGenerateOCSP()
-				}
-			}
-		}()
-		b.stopChans = append(b.stopChans, stopChan)
-	}
+}
+
+func (b *bencher) runAsync(issuanceThroughput int, ocspThroughput int) {
+	b.started = time.Now()
+	b.stopWG = new(sync.WaitGroup)
+	go b.updateStats()
+	b.asyncSetupSender(b.sendIssueCertificate, issuanceThroughput)
+	b.asyncSetupSender(b.sendGenerateOCSP, ocspThroughput)
 }
 
 func (b *bencher) stop() {
@@ -175,6 +199,7 @@ func (b *bencher) stop() {
 			time.Duration(b.issuanceLatency.Min()),
 			time.Duration(int64(b.issuanceLatency.Mean())),
 		)
+		fmt.Printf("\n%s\n", b.issuanceLatency)
 	}
 	if b.ocspLatency.TotalCount() != 0 {
 		fmt.Printf(
@@ -185,10 +210,8 @@ func (b *bencher) stop() {
 			time.Duration(b.ocspLatency.Min()),
 			time.Duration(int64(b.ocspLatency.Mean())),
 		)
+		fmt.Printf("\n%s\n", b.ocspLatency)
 	}
-
-	fmt.Println("")
-	printRate(b.issuanceLatency.CumulativeDistribution())
 
 	if b.debug {
 		fmt.Printf(
@@ -215,12 +238,12 @@ func main() {
 			Usage:  "Path to Boulder JSON configuration file",
 		},
 		cli.IntFlag{
-			Name:  "issuanceSenders",
-			Usage: "Number of goroutines sending ca.IssueCertificate RPC calls",
+			Name:  "issuance",
+			Usage: "How many ca.IssueCertificate RPC calls to make (if mode=pool this is the max concurrent senders, if mode=async this is how many calls to send per second)",
 		},
 		cli.IntFlag{
-			Name:  "ocspSenders",
-			Usage: "Number of goroutines sending ca.GenerateOCSP RPc calls",
+			Name:  "ocsp",
+			Usage: "How many ca.GenerateOCSP RPC calls to make (if mode=pool this is the max concurrent senders, if mode=async this is how many calls to send per second)",
 		},
 		cli.StringFlag{
 			Name:  "benchTime",
@@ -247,9 +270,19 @@ func main() {
 			Name:  "debug",
 			Usage: "Shows some debug information",
 		},
+		cli.StringFlag{
+			Name:  "mode",
+			Usage: "Testing mode (pool|async)",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
+		mode := c.GlobalString("mode")
+		if mode != "pool" && mode != "async" {
+			fmt.Println("mode must be either pool or async")
+			return
+		}
+
 		configFileName := c.GlobalString("config")
 		configJSON, err := ioutil.ReadFile(configFileName)
 		cmd.FailOnError(err, "Unable to read config file")
@@ -313,11 +346,11 @@ func main() {
 		cert, err := x509.ParseCertificate(certDER)
 		cmd.FailOnError(err, "Failed to parse test certificate")
 
-		issuanceSenders := c.GlobalInt("issuanceSenders")
-		ocspSenders := c.GlobalInt("ocspSenders")
+		issuanceSenders := c.GlobalInt("issuance")
+		ocspSenders := c.GlobalInt("ocsp")
 
 		if issuanceSenders <= 0 && ocspSenders <= 0 {
-			fmt.Println("Either issuanceSenders or ocspSenders required")
+			fmt.Println("Either issuance or ocsp required")
 			return
 		}
 
@@ -336,7 +369,7 @@ func main() {
 			statsStop:       make(chan bool, 1),
 			statsInterval:   statsInterval,
 			hideStats:       c.GlobalBool("hideStats"),
-			issuanceLatency: hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 3),
+			issuanceLatency: hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 5),
 			ocspLatency:     hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 3),
 			debug:           c.GlobalBool("debug"),
 		}
@@ -357,7 +390,12 @@ func main() {
 			os.Exit(0)
 		}()
 
-		b.run(issuanceSenders, ocspSenders)
+		switch mode {
+		case "pool":
+			b.runSerial(issuanceSenders, ocspSenders)
+		case "async":
+			b.runAsync(issuanceSenders, ocspSenders)
+		}
 
 		runtimeStr := c.GlobalString("benchTime")
 		if runtimeStr == "" {
