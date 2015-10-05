@@ -402,6 +402,8 @@ func ProfileCmd(profileName string, stats statsd.Statter) {
 		stats.Timing(fmt.Sprintf("%s.Gostats.Gc.PauseAvg", profileName), gcPauseAvg, 1.0)
 		stats.Gauge(fmt.Sprintf("%s.Gostats.Gc.LastPauseLatency", profileName), lastGC, 1.0)
 		stats.Gauge(fmt.Sprintf("%s.Gostats.Gc.NextAt", profileName), int64(memoryStats.NextGC), 1.0)
+		stats.Gauge(fmt.Sprintf("%s.Gostats.Gc.CPUFraction", profileName), int64(memoryStats.GCCPUFraction*100), 1.0)
+		stats.Gauge(fmt.Sprintf("%s.Gostats.Gc.Count", profileName), int64(memoryStats.NumGC), 1.0)
 	}
 }
 
