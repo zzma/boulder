@@ -128,6 +128,7 @@ type StorageAdder interface {
 	AddCertificate([]byte, int64) (string, error)
 
 	AddSCTReceipt(SignedCertificateTimestamp) error
+	UpdateSCTReceipt(SignedCertificateTimestamp) error
 }
 
 // StorageAuthority interface represents a simple key/value

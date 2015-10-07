@@ -63,6 +63,7 @@ const (
 	MethodCountCertificatesRange            = "CountCertificatesRange"            // SA
 	MethodGetSCTReceipt                     = "GetSCTReceipt"                     // SA
 	MethodAddSCTReceipt                     = "AddSCTReceipt"                     // SA
+	MethodUpdateSCTReceipt                  = "UpdateSCTReceipt"                  // SA
 	MethodSubmitToCT                        = "SubmitToCT"                        // Pub
 )
 
@@ -1064,6 +1065,25 @@ func NewStorageAuthorityServer(rpc Server, impl core.StorageAuthority) error {
 		return nil, nil
 	})
 
+	rpc.Handle(MethodUpdateSCTReceipt, func(req []byte) (response []byte, err error) {
+		var sct core.SignedCertificateTimestamp
+		err = json.Unmarshal(req, &sct)
+		if err != nil {
+			// AUDIT[ Improper Messages ] 0786b6f2-91ca-4f48-9883-842a19084c64
+			improperMessage(MethodUpdateSCTReceipt, err, req)
+			return
+		}
+
+		err = impl.UpdateSCTReceipt(core.SignedCertificateTimestamp(sct))
+		if err != nil {
+			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+			errorCondition(MethodUpdateSCTReceipt, err, req)
+			return
+		}
+
+		return nil, nil
+	})
+
 	return nil
 }
 
@@ -1364,5 +1384,16 @@ func (cac StorageAuthorityClient) AddSCTReceipt(sct core.SignedCertificateTimest
 	}
 
 	_, err = cac.rpc.DispatchSync(MethodAddSCTReceipt, data)
+	return
+}
+
+// UpdateSCTReceipt updates an existing SCT in the database.
+func (cac StorageAuthorityClient) UpdateSCTReceipt(sct core.SignedCertificateTimestamp) (err error) {
+	data, err := json.Marshal(sct)
+	if err != nil {
+		return
+	}
+
+	_, err = cac.rpc.DispatchSync(MethodUpdateSCTReceipt, data)
 	return
 }

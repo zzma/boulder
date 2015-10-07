@@ -189,7 +189,7 @@ func setup(t *testing.T, port, retries int) (PublisherImpl, *x509.Certificate) {
 	intermediatePEM, _ := pem.Decode([]byte(testIntermediate))
 
 	pub, err := NewPublisherImpl(CTConfig{
-		Logs: []LogDescription{LogDescription{URI: fmt.Sprintf("http://localhost:%d", port)}},
+		Logs: []core.LogDescription{core.LogDescription{URI: fmt.Sprintf("http://localhost:%d", port)}},
 		SubmissionBackoffString:    "0s",
 		IntermediateBundleFilename: issuerPath,
 		SubmissionRetries:          retries,
@@ -211,7 +211,7 @@ func TestNewPublisherImpl(t *testing.T) {
 	_, err := NewPublisherImpl(ctConf)
 	test.AssertNotError(t, err, "Couldn't create new Publisher")
 
-	ctConf = CTConfig{Logs: []LogDescription{LogDescription{URI: "http://localhost"}}, SubmissionBackoffString: "0s", IntermediateBundleFilename: issuerPath}
+	ctConf = CTConfig{Logs: []core.LogDescription{core.LogDescription{URI: "http://localhost"}}, SubmissionBackoffString: "0s", IntermediateBundleFilename: issuerPath}
 	_, err = NewPublisherImpl(ctConf)
 	test.AssertNotError(t, err, "Couldn't create new Publisher")
 }
@@ -318,7 +318,7 @@ func TestMultiLog(t *testing.T) {
 	test.AssertNotError(t, err, "Failed to get test server port")
 
 	pub, leaf := setup(t, portA, 0)
-	pub.ctLogs = append(pub.ctLogs, LogDescription{URI: fmt.Sprintf("http://localhost:%d", portB)})
+	pub.ctLogs = append(pub.ctLogs, core.LogDescription{URI: fmt.Sprintf("http://localhost:%d", portB)})
 
 	log.Clear()
 	err = pub.SubmitToCT(leaf.Raw)

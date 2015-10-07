@@ -19,6 +19,7 @@ import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
 	gorp "github.com/letsencrypt/boulder/Godeps/_workspace/src/gopkg.in/gorp.v1"
+
 	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"
 )
@@ -27,9 +28,10 @@ const getChallengesQuery = "SELECT * FROM challenges WHERE authorizationID = :au
 
 // SQLStorageAuthority defines a Storage Authority
 type SQLStorageAuthority struct {
-	dbMap *gorp.DbMap
-	clk   clock.Clock
-	log   *blog.AuditLogger
+	dbMap  *gorp.DbMap
+	clk    clock.Clock
+	log    *blog.AuditLogger
+	ctLogs []core.LogDescription
 }
 
 func digest256(data []byte) []byte {
@@ -51,15 +53,16 @@ type authzModel struct {
 
 // NewSQLStorageAuthority provides persistence using a SQL backend for
 // Boulder. It will modify the given gorp.DbMap by adding relevent tables.
-func NewSQLStorageAuthority(dbMap *gorp.DbMap, clk clock.Clock) (*SQLStorageAuthority, error) {
+func NewSQLStorageAuthority(dbMap *gorp.DbMap, clk clock.Clock, ctLogs []core.LogDescription) (*SQLStorageAuthority, error) {
 	logger := blog.GetAuditLogger()
 
 	logger.Notice("Storage Authority Starting")
 
 	ssa := &SQLStorageAuthority{
-		dbMap: dbMap,
-		clk:   clk,
-		log:   logger,
+		dbMap:  dbMap,
+		clk:    clk,
+		log:    logger,
+		ctLogs: ctLogs,
 	}
 
 	return ssa, nil
@@ -626,6 +629,13 @@ func (ssa *SQLStorageAuthority) AddCertificate(certDER []byte, regID int64) (dig
 			NotBefore:    parsedCertificate.NotBefore,
 		}
 	}
+	emptyReceipts := make([]core.SignedCertificateTimestamp, len(ssa.ctLogs))
+	for i, ctLog := range ssa.ctLogs {
+		emptyReceipts[i] = core.SignedCertificateTimestamp{
+			LogID:             ctLog.ID,
+			CertificateSerial: serial,
+		}
+	}
 
 	tx, err := ssa.dbMap.Begin()
 	if err != nil {
@@ -647,6 +657,13 @@ func (ssa *SQLStorageAuthority) AddCertificate(certDER []byte, regID int64) (dig
 
 	for _, issuedName := range issuedNames {
 		err = tx.Insert(&issuedName)
+		if err != nil {
+			tx.Rollback()
+			return
+		}
+	}
+	for _, emptyReceipt := range emptyReceipts {
+		err = tx.Insert(&emptyReceipt)
 		if err != nil {
 			tx.Rollback()
 			return
@@ -727,11 +744,28 @@ func (e ErrDuplicateReceipt) Error() string {
 	return string(e)
 }
 
-// AddSCTReceipt adds a new SCT receipt to the (append-only) sctReceipts table
+// AddSCTReceipt adds a new SCT receipt to the sctReceipts table
 func (ssa *SQLStorageAuthority) AddSCTReceipt(sct core.SignedCertificateTimestamp) error {
 	err := ssa.dbMap.Insert(&sct)
 	if err != nil && strings.HasPrefix(err.Error(), "Error 1062: Duplicate entry") {
 		err = ErrDuplicateReceipt(err.Error())
 	}
+	return err
+}
+
+// UpdateSCTReceipt updates an existing SCT receipt in the sctReceipts table, but
+// only if that receipt is empty
+func (ssa *SQLStorageAuthority) UpdateSCTReceipt(sct core.SignedCertificateTimestamp) error {
+	oldReceipt, err := ssa.GetSCTReceipt(sct.CertificateSerial, sct.LogID)
+	if err != nil {
+		return err
+	}
+
+	if oldReceipt.Timestamp != 0 {
+		return fmt.Errorf("SCT receipt has already been updated")
+	}
+
+	sct.ID = oldReceipt.ID
+	_, err = ssa.dbMap.Update(&sct)
 	return err
 }

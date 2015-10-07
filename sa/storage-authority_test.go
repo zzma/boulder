@@ -43,7 +43,10 @@ func initSA(t *testing.T) (*SQLStorageAuthority, clock.FakeClock, func()) {
 	fc := clock.NewFake()
 	fc.Add(1 * time.Hour)
 
-	sa, err := NewSQLStorageAuthority(dbMap, fc)
+	testCTLog := core.LogDescription{
+		ID: "this-should-be-base64",
+	}
+	sa, err := NewSQLStorageAuthority(dbMap, fc, []core.LogDescription{testCTLog})
 	if err != nil {
 		t.Fatalf("Failed to create SA: %s", err)
 	}
@@ -331,6 +334,14 @@ func TestAddCertificate(t *testing.T) {
 	test.Assert(t, !certificateStatus2.SubscriberApproved, "SubscriberApproved should be false")
 	test.Assert(t, certificateStatus2.Status == core.OCSPStatusGood, "OCSP Status should be good")
 	test.Assert(t, certificateStatus2.OCSPLastUpdated.IsZero(), "OCSPLastUpdated should be nil")
+
+	// Check empty SCT receipts were created
+	emptyReceipt, err := sa.GetSCTReceipt(serial, "this-should-be-base64")
+	test.AssertNotError(t, err, "Couldn't find empty SCT receipt")
+	test.AssertEquals(t, emptyReceipt.SCTVersion, uint8(0))
+	test.AssertEquals(t, emptyReceipt.Timestamp, uint64(0))
+	test.AssertEquals(t, len(emptyReceipt.Extensions), 0)
+	test.AssertEquals(t, len(emptyReceipt.Signature), 0)
 }
 
 func TestCountCertificatesByName(t *testing.T) {
@@ -417,10 +428,9 @@ func TestAddSCTReceipt(t *testing.T) {
 	defer cleanup()
 	err = sa.AddSCTReceipt(sct)
 	test.AssertNotError(t, err, "Failed to add SCT receipt")
-	// Append only and unique on signature and across LogID and CertificateSerial
+
 	err = sa.AddSCTReceipt(sct)
 	test.AssertError(t, err, "Incorrectly added duplicate SCT receipt")
-	fmt.Println(err)
 }
 
 func TestGetSCTReceipt(t *testing.T) {
@@ -566,4 +576,43 @@ func TestCountCertificates(t *testing.T) {
 	count, err = sa.CountCertificatesRange(now.Add(-24*time.Hour), now)
 	test.AssertNotError(t, err, "Couldn't get certificate count for the last 24hrs")
 	test.AssertEquals(t, count, int64(0))
+}
+
+func TestUpdateSCTReceipt(t *testing.T) {
+	sa, _, cleanup := initSA(t)
+	defer cleanup()
+
+	sigBytes, err := base64.StdEncoding.DecodeString(sctSignature)
+	test.AssertNotError(t, err, "Failed to decode SCT signature")
+
+	origSCT := core.SignedCertificateTimestamp{
+		// SCTVersion:        sctVersion,
+		// Timestamp:         sctTimestamp,
+		// Signature:         sigBytes,
+		LogID:             sctLogID,
+		CertificateSerial: sctCertSerial,
+	}
+	err = sa.AddSCTReceipt(origSCT)
+	test.AssertNotError(t, err, "Failed to add SCT receipt")
+	fmt.Printf("%#v\n", origSCT)
+
+	updSCT := core.SignedCertificateTimestamp{
+		SCTVersion:        sctVersion,
+		Timestamp:         sctTimestamp,
+		Signature:         sigBytes,
+		LogID:             sctLogID,
+		CertificateSerial: sctCertSerial,
+	}
+
+	err = sa.UpdateSCTReceipt(updSCT)
+	test.AssertNotError(t, err, "Failed to update SCT receipt")
+	test.AssertEquals(t, origSCT.ID, updSCT.ID)
+	fmt.Printf("%#v\n", updSCT)
+
+	finSCT, err := sa.GetSCTReceipt(sctCertSerial, sctLogID)
+	test.AssertNotError(t, err, "Failed to get existing SCT receipt")
+	test.AssertEquals(t, updSCT.Timestamp, finSCT.Timestamp)
+	test.AssertByteEquals(t, updSCT.Signature, finSCT.Signature)
+	test.AssertByteEquals(t, updSCT.Extensions, finSCT.Extensions)
+	fmt.Printf("%#v\n", finSCT)
 }

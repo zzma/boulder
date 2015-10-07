@@ -304,6 +304,11 @@ func (sa *StorageAuthority) AddSCTReceipt(sct core.SignedCertificateTimestamp) (
 	return
 }
 
+// UpdateSCTReceipt is a mock
+func (sa *StorageAuthority) UpdateSCTReceipt(sct core.SignedCertificateTimestamp) (err error) {
+	return
+}
+
 // GetLatestValidAuthorization is a mock
 func (sa *StorageAuthority) GetLatestValidAuthorization(registrationID int64, identifier core.AcmeIdentifier) (authz core.Authorization, err error) {
 	if registrationID == 1 && identifier.Type == "dns" {
