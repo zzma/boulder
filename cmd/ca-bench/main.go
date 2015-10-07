@@ -26,6 +26,11 @@ import (
 	"github.com/letsencrypt/boulder/rpc"
 )
 
+const (
+	testCertDNSName    = "testing.letsencrypt.org"
+	testCertCommonName = "Happy Hacker Testing Cert"
+)
+
 // So many things on this struct... but this is just for benchmarking? ._.
 type bencher struct {
 	cac core.CertificateAuthority
@@ -239,11 +244,11 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "issuance",
-			Usage: "How many ca.IssueCertificate RPC calls to make (if mode=pool this is the max concurrent senders, if mode=async this is how many calls to send per second)",
+			Usage: "How many ca.IssueCertificate RPC calls to make (meaning depends on -mode flag)",
 		},
 		cli.IntFlag{
 			Name:  "ocsp",
-			Usage: "How many ca.GenerateOCSP RPC calls to make (if mode=pool this is the max concurrent senders, if mode=async this is how many calls to send per second)",
+			Usage: "How many ca.GenerateOCSP RPC calls to make (meaning depends on -mode flag)",
 		},
 		cli.StringFlag{
 			Name:  "benchTime",
@@ -256,30 +261,30 @@ func main() {
 		},
 		cli.BoolFlag{
 			Name:  "hideStats",
-			Usage: "Hides in progress stats, information about the run will still be printed at exit",
+			Usage: "Hides progress stats, information about the run will still be printed at exit",
 		},
 		cli.StringFlag{
 			Name:  "issuerKeyPath",
-			Usage: "Path to correct issuer key to use for generating certificates and ocsp requests",
+			Usage: "Path to issuer key to use for generating certificates and ocsp requests",
 		},
 		cli.StringFlag{
 			Name:  "issuerPath",
-			Usage: "Path to correct issuer cert to use for generating certificates and ocsp requests",
+			Usage: "Path to issuer cert to use for generating certificates and ocsp requests",
 		},
 		cli.BoolFlag{
 			Name:  "debug",
-			Usage: "Shows some debug information",
+			Usage: "Shows some debug information (byte sizes of HDRHistogram structs)",
 		},
 		cli.StringFlag{
 			Name:  "mode",
-			Usage: "Testing mode (pool|async)",
+			Usage: "Testing mode (backpressure|async). If mode=backpressure -issuance and -ocsp indicate the sizes of Goroutine pools to use, if mode=async they indicate the number of requests to send per second",
 		},
 	}
 
 	app.Action = func(c *cli.Context) {
 		mode := c.GlobalString("mode")
-		if mode != "pool" && mode != "async" {
-			fmt.Println("mode must be either pool or async")
+		if mode != "backpressure" && mode != "async" {
+			fmt.Println("mode must be either backpressure or async")
 			return
 		}
 
@@ -322,8 +327,8 @@ func main() {
 		csrDER, err := x509.CreateCertificateRequest(
 			rand.Reader,
 			&x509.CertificateRequest{
-				Subject:  pkix.Name{CommonName: "wat.com"},
-				DNSNames: []string{"wat.com"},
+				Subject:  pkix.Name{CommonName: testCertCommonName},
+				DNSNames: []string{testCertDNSName},
 			},
 			issuerKey,
 		)
@@ -334,7 +339,7 @@ func main() {
 		template := &x509.Certificate{
 			NotBefore:             now,
 			NotAfter:              now.Add(time.Hour),
-			Subject:               pkix.Name{CommonName: "Happy Hacker Fake Cert"},
+			Subject:               pkix.Name{CommonName: testCertCommonName},
 			BasicConstraintsValid: true,
 		}
 		serialNumber, err := rand.Int(rand.Reader, big.NewInt(1000))
@@ -391,7 +396,7 @@ func main() {
 		}()
 
 		switch mode {
-		case "pool":
+		case "backpressure":
 			b.runSerial(issuanceSenders, ocspSenders)
 		case "async":
 			b.runAsync(issuanceSenders, ocspSenders)
