@@ -37,6 +37,7 @@ type bencher struct {
 
 	// Pregenerated CSR and OCSP signing request for calls
 	csr         x509.CertificateRequest
+	regID       int64
 	ocspRequest core.OCSPSigningRequest
 
 	// Metadeta for generating stats
@@ -103,7 +104,7 @@ func (b *bencher) updateStats() {
 
 func (b *bencher) sendIssueCertificate() {
 	s := time.Now()
-	_, err := b.cac.IssueCertificate(b.csr, 1)
+	_, err := b.cac.IssueCertificate(b.csr, b.regID)
 	b.issuanceLatency.RecordValue(int64(time.Since(s) / time.Millisecond))
 	// b.issuanceLatency.RecordCorrectedValue(int64(time.Since(s)/time.Millisecond), int64(b.issuanceLatency.Mean()))
 	if err != nil {
@@ -279,6 +280,11 @@ func main() {
 			Name:  "mode",
 			Usage: "Testing mode (backpressure|async). If mode=backpressure -issuance and -ocsp indicate the sizes of Goroutine pools to use, if mode=async they indicate the number of requests to send per second",
 		},
+		cli.IntFlag{
+			Name:  "regID",
+			Value: 1,
+			Usage: "Registration ID to use when creating ID (must be from an existing registration)",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
@@ -327,7 +333,7 @@ func main() {
 		csrDER, err := x509.CreateCertificateRequest(
 			rand.Reader,
 			&x509.CertificateRequest{
-				Subject:  pkix.Name{CommonName: testCertCommonName},
+				Subject:  pkix.Name{CommonName: testCertDNSName},
 				DNSNames: []string{testCertDNSName},
 			},
 			issuerKey,
@@ -365,8 +371,9 @@ func main() {
 		timeoutDuration := 10 * time.Second
 
 		b := bencher{
-			cac: cac,
-			csr: *csr,
+			cac:   cac,
+			csr:   *csr,
+			regID: int64(c.GlobalInt("regID")),
 			ocspRequest: core.OCSPSigningRequest{
 				CertDER: cert.Raw,
 				Status:  string(core.OCSPStatusGood),
