@@ -27,8 +27,26 @@ import (
 
 const (
 	testCertDNSName    = "testing.letsencrypt.org"
-	testCertCommonName = "Happy Hacker Testing Cert"
+	testCertCommonName = "Happy Hacker Benching Cert"
 )
+
+type histWrapper struct {
+	*hdrhistogram.Histogram
+}
+
+func (hw histWrapper) MarshalJSON() ([]byte, error) {
+	var marshaler struct {
+		X      []float64 `json:"x"`
+		ValueY []int64   `json:"valueY"`
+		CountY []int64   `json:"countY"`
+	}
+	for _, b := range hw.CumulativeDistribution() {
+		marshaler.X = append(marshaler.X, b.Quantile/100)
+		marshaler.ValueY = append(marshaler.ValueY, b.ValueAt)
+		marshaler.CountY = append(marshaler.CountY, b.Count)
+	}
+	return json.Marshal(marshaler)
+}
 
 type rawLatencySeries struct {
 	X []time.Time     `json:"x"`
@@ -91,10 +109,12 @@ type rateSeries struct {
 }
 
 type chartData struct {
-	Issuance     combinedSeries `json:"issuance,omitempty"`
-	IssuanceRate rateSeries     `json:"issuanceRate,omitempty"`
-	OCSP         combinedSeries `json:"ocsp,omitempty"`
-	OCSPRate     rateSeries     `json:"ocspRate,omitempty"`
+	Issuance        combinedSeries `json:"issuance,omitempty"`
+	IssuanceLatency histWrapper    `json:"issuanceLatency,omitempty"`
+	IssuanceRate    rateSeries     `json:"issuanceRate,omitempty"`
+	OCSP            combinedSeries `json:"ocsp,omitempty"`
+	OCSPRate        rateSeries     `json:"ocspRate,omitempty"`
+	OCSPLatency     histWrapper    `json:"ocspLatency,omitempty"`
 }
 
 // So many things on this struct... but this is just for benchmarking? ._.
@@ -108,10 +128,6 @@ type bencher struct {
 
 	// Metadeta for generating stats
 	started time.Time
-
-	// latency histograms
-	issuanceLatency *hdrhistogram.Histogram
-	ocspLatency     *hdrhistogram.Histogram
 
 	// Running totals
 	issuances           int64
@@ -183,11 +199,11 @@ func (b *bencher) updateStats() {
 
 				fmt.Printf(
 					"issuance calls: %d (successful calls: %3.2f/s, errors: %d, timeouts: %d), ocsp calls: %d (successful calls: %3.2f/s, errors: %d, timeouts: %d)\n",
-					b.issuanceLatency.TotalCount(),
+					b.chartPoints.IssuanceLatency.TotalCount(),
 					goodCertRate,
 					totalIErrors,
 					totalITimeouts,
-					b.ocspLatency.TotalCount(),
+					b.chartPoints.OCSPLatency.TotalCount(),
 					goodOCSPRate,
 					totalOErrors,
 					totalOTimeouts,
@@ -202,7 +218,7 @@ func (b *bencher) sendIssueCertificate() {
 	s := time.Now()
 	_, err := b.cac.IssueCertificate(b.csr, b.regID)
 	callDuration := time.Since(s)
-	b.issuanceLatency.RecordValue(int64(callDuration / time.Millisecond))
+	b.chartPoints.IssuanceLatency.RecordValue(int64(callDuration / time.Millisecond))
 	var lp latencyPoint
 	if b.chartPath != "" {
 		lp = latencyPoint{
@@ -231,7 +247,7 @@ func (b *bencher) sendGenerateOCSP() {
 	s := time.Now()
 	_, err := b.cac.GenerateOCSP(b.ocspRequest)
 	callDuration := time.Since(s)
-	b.ocspLatency.RecordValue(int64(callDuration / time.Millisecond))
+	b.chartPoints.OCSPLatency.RecordValue(int64(callDuration / time.Millisecond))
 	var lp latencyPoint
 	if b.chartPath != "" {
 		lp = latencyPoint{
@@ -291,34 +307,34 @@ func (b *bencher) stop() {
 	}
 	b.stopWG.Wait()
 	fmt.Printf("Stopped, ran for %s\n", time.Since(b.started))
-	if b.issuanceLatency.TotalCount() != 0 {
+	if b.chartPoints.IssuanceLatency.TotalCount() != 0 {
 		fmt.Printf(
 			"\nCertificate Issuance\nCount: %d (%d errors)\nLatency: Max %s, Min %s, Avg %s\n",
-			b.issuanceLatency.TotalCount(),
+			b.chartPoints.IssuanceLatency.TotalCount(),
 			b.issuanceErrors,
-			time.Duration(b.issuanceLatency.Max()),
-			time.Duration(b.issuanceLatency.Min()),
-			time.Duration(int64(b.issuanceLatency.Mean())),
+			time.Duration(b.chartPoints.IssuanceLatency.Max()),
+			time.Duration(b.chartPoints.IssuanceLatency.Min()),
+			time.Duration(int64(b.chartPoints.IssuanceLatency.Mean())),
 		)
-		fmt.Printf("\n%s\n", b.issuanceLatency)
+		fmt.Printf("\n%s\n", b.chartPoints.IssuanceLatency)
 	}
-	if b.ocspLatency.TotalCount() != 0 {
+	if b.chartPoints.OCSPLatency.TotalCount() != 0 {
 		fmt.Printf(
 			"\nOCSP Signing\nCount: %d (%d errors)\nLatency: Max %s, Min %s, Avg %s\n",
-			b.ocspLatency.TotalCount(),
+			b.chartPoints.OCSPLatency.TotalCount(),
 			b.ocspSigningErrors,
-			time.Duration(b.ocspLatency.Max()),
-			time.Duration(b.ocspLatency.Min()),
-			time.Duration(int64(b.ocspLatency.Mean())),
+			time.Duration(b.chartPoints.OCSPLatency.Max()),
+			time.Duration(b.chartPoints.OCSPLatency.Min()),
+			time.Duration(int64(b.chartPoints.OCSPLatency.Mean())),
 		)
-		fmt.Printf("\n%s\n", b.ocspLatency)
+		fmt.Printf("\n%s\n", b.chartPoints.OCSPLatency)
 	}
 
 	if b.debug {
 		fmt.Printf(
 			"\nDEBUG\nb.issuanceLatency: %d bytes\nb.ocspLatency: %d bytes\n",
-			b.issuanceLatency.ByteSize(),
-			b.ocspLatency.ByteSize(),
+			b.chartPoints.IssuanceLatency.ByteSize(),
+			b.chartPoints.OCSPLatency.ByteSize(),
 		)
 	}
 
@@ -466,17 +482,19 @@ func main() {
 				CertDER: cert.DER,
 				Status:  string(core.OCSPStatusGood),
 			},
-			statsStop:       make(chan bool, 1),
-			statsInterval:   statsInterval,
-			hideStats:       c.GlobalBool("hideStats"),
-			issuanceLatency: hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 5),
-			ocspLatency:     hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 3),
-			chartPath:       c.GlobalString("chartDataPath"),
-			debug:           c.GlobalBool("debug"),
+			statsStop:     make(chan bool, 1),
+			statsInterval: statsInterval,
+			hideStats:     c.GlobalBool("hideStats"),
+			chartPoints: chartData{
+				IssuanceLatency: histWrapper{hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 5)},
+				OCSPLatency:     histWrapper{hdrhistogram.New(0, int64(timeoutDuration/time.Millisecond), 3)},
+			},
+			chartPath: c.GlobalString("chartDataPath"),
+			debug:     c.GlobalBool("debug"),
 		}
 		if b.chartPath != "" {
 			b.chartPoints.IssuanceRate.IdealY = float64(issuanceSenders)
-			// b.chartPoints.OCSPRate.IdealY = float64(ocspSenders)
+			b.chartPoints.OCSPRate.IdealY = float64(ocspSenders)
 		}
 
 		// Setup signal catching and such
