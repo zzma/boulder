@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"net/url"
+	"sort"
 	"testing"
 
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
@@ -33,6 +34,12 @@ func TestNewToken(t *testing.T) {
 		collider[token] = true
 	}
 	return
+}
+
+func TestLooksLikeAToken(t *testing.T) {
+	test.Assert(t, !LooksLikeAToken("R-UL_7MrV3tUUjO9v5ym2srK3dGGCwlxbVyKBdwLOS"), "Accepted short token")
+	test.Assert(t, !LooksLikeAToken("R-UL_7MrV3tUUjO9v5ym2srK3dGGCwlxbVyKBdwLOS%"), "Accepted invalid token")
+	test.Assert(t, LooksLikeAToken("R-UL_7MrV3tUUjO9v5ym2srK3dGGCwlxbVyKBdwLOSU"), "Rejected valid token")
 }
 
 func TestSerialUtils(t *testing.T) {
@@ -58,11 +65,21 @@ const JWK1JSON = `{
   "e": "AQAB"
 }`
 const JWK1Digest = `ul04Iq07ulKnnrebv2hv3yxCGgVvoHs8hjq2tVKx3mc=`
+const JWK1Thumbprint = `-kVpHjJCDNQQk-j9BGMpzHAVCiOqvoTRZB-Ov4CAiM4`
 const JWK2JSON = `{
   "kty":"RSA",
   "n":"yTsLkI8n4lg9UuSKNRC0UPHsVjNdCYk8rGXIqeb_rRYaEev3D9-kxXY8HrYfGkVt5CiIVJ-n2t50BKT8oBEMuilmypSQqJw0pCgtUm-e6Z0Eg3Ly6DMXFlycyikegiZ0b-rVX7i5OCEZRDkENAYwFNX4G7NNCwEZcH7HUMUmty9dchAqDS9YWzPh_dde1A9oy9JMH07nRGDcOzIh1rCPwc71nwfPPYeeS4tTvkjanjeigOYBFkBLQuv7iBB4LPozsGF1XdoKiIIi-8ye44McdhOTPDcQp3xKxj89aO02pQhBECv61rmbPinvjMG9DYxJmZvjsKF4bN2oy0DxdC1jDw",
   "e":"AQAB"
 }`
+
+func TestKeyThumbprint(t *testing.T) {
+	var jwk jose.JsonWebKey
+	json.Unmarshal([]byte(JWK1JSON), &jwk)
+	thumbprint, err := Thumbprint(&jwk)
+
+	test.AssertNotError(t, err, "Failed to compute JWK digest")
+	test.AssertEquals(t, thumbprint, JWK1Thumbprint)
+}
 
 func TestKeyDigest(t *testing.T) {
 	// Test with JWK (value, reference, and direct)
@@ -96,4 +113,10 @@ func TestAcmeURL(t *testing.T) {
 	u, _ := url.Parse(s)
 	a := (*AcmeURL)(u)
 	test.AssertEquals(t, s, a.String())
+}
+
+func TestUniqueLowerNames(t *testing.T) {
+	u := UniqueLowerNames([]string{"foobar.com", "fooBAR.com", "baz.com", "foobar.com", "bar.com", "bar.com"})
+	sort.Strings(u)
+	test.AssertDeepEquals(t, []string{"bar.com", "baz.com", "foobar.com"}, u)
 }

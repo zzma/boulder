@@ -121,6 +121,7 @@
   "ra": {
     "rateLimitPoliciesFilename": "test/rate-limit-policies.yml",
     "maxConcurrentRPCServerRequests": 16,
+    "maxContactsPerRegistration": 100,
     "debugAddr": "localhost:8002"
   },
 
@@ -134,9 +135,9 @@
     "userAgent": "boulder",
     "debugAddr": "localhost:8004",
     "portConfig": {
-      "simpleHTTPPort": 5001,
-      "simpleHTTPSPort": 5001,
-      "dvsniPort": 5001
+      "httpPort": 5001,
+      "httpsPort": 5001,
+      "tlsPort": 5001
     },
     "maxConcurrentRPCServerRequests": 16
   },
@@ -189,6 +190,7 @@
   },
 
   "publisher": {
+    "maxConcurrentRPCServerRequests": 16,
     "debugAddr": "localhost:8009"
   },
 
@@ -208,8 +210,7 @@
       "submissionRetries": 1,
       "submissionBackoff": "1s",
       "intermediateBundleFilename": "test/test-ca.pem"
-    },
-    "maxConcurrentRPCServerRequests": 16
+    }
   },
 
   "certChecker": {
