@@ -392,7 +392,8 @@ func (va *ValidationAuthorityImpl) validateTLSWithZName(identifier core.AcmeIden
 
 	challenge.Error = &core.ProblemDetails{
 		Type:   core.UnauthorizedProblem,
-		Detail: "Correct zName not found for TLS SNI challenge",
+		Detail: fmt.Sprintf("Correct zName not found for TLS SNI challenge. Found %s",
+			strings.Join(certs[0].DNSNames, ", ")),
 	}
 	challenge.Status = core.StatusInvalid
 	return challenge, challenge.Error
