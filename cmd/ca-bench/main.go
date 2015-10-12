@@ -39,13 +39,13 @@ func humanTime(seconds int) string {
 	seconds = int(nanos / time.Second)
 	s := ""
 	if hours > 0 {
-		s += fmt.Sprintf("%d hours ", hours)
+		s += fmt.Sprintf("%dh", hours)
 	}
 	if minutes > 0 {
-		s += fmt.Sprintf("%d minutes ", minutes)
+		s += fmt.Sprintf("%dm", minutes)
 	}
 	if seconds >= 0 {
-		s += fmt.Sprintf("%d seconds ", seconds)
+		s += fmt.Sprintf("%ds", seconds)
 	}
 	return s
 }
