@@ -100,21 +100,13 @@ func (cs combinedSeries) MarshalJSON() ([]byte, error) {
 	return jsonSeries, nil
 }
 
-type rateSeries struct {
-	X        []time.Time `json:"x"`
-	GoodY    []float64   `json:"goodY"`
-	ErrorY   []float64   `json:"errorY"`
-	TimeoutY []float64   `json:"timeoutY"`
-	IdealY   float64     `json:"idealY"`
-}
-
 type chartData struct {
 	Issuance        combinedSeries `json:"issuance,omitempty"`
 	IssuanceLatency histWrapper    `json:"issuanceLatency,omitempty"`
-	IssuanceRate    rateSeries     `json:"issuanceRate,omitempty"`
+	IssuanceSent    int            `json:"issuanceSent,omitempty"`
 	OCSP            combinedSeries `json:"ocsp,omitempty"`
-	OCSPRate        rateSeries     `json:"ocspRate,omitempty"`
 	OCSPLatency     histWrapper    `json:"ocspLatency,omitempty"`
+	OCSPSent        int            `json:"ocspSent,omitempty"`
 }
 
 // So many things on this struct... but this is just for benchmarking? ._.
@@ -130,10 +122,8 @@ type bencher struct {
 	started time.Time
 
 	// Running totals
-	issuances           int64
 	issuanceErrors      int64
 	issuanceTimeouts    int64
-	ocspSignings        int64
 	ocspSigningErrors   int64
 	ocspSigningTimeouts int64
 
@@ -153,62 +143,35 @@ type bencher struct {
 
 func (b *bencher) updateStats() {
 	c := time.NewTicker(b.statsInterval)
-	prev := time.Now()
-	totalIErrors, totalITimeouts := int64(0), int64(0)
-	totalOErrors, totalOTimeouts := int64(0), int64(0)
-	for now := range c.C {
+	for _ = range c.C {
 		select {
 		case <-b.statsStop:
 			return
 		default:
 			if !b.hideStats {
-				issuances := atomic.LoadInt64(&b.issuances)
-				atomic.StoreInt64(&b.issuances, 0)
+				issuances := b.chartPoints.IssuanceLatency.TotalCount()
 				issuanceErrors := atomic.LoadInt64(&b.issuanceErrors)
-				atomic.StoreInt64(&b.issuanceErrors, 0)
 				issuanceTimeouts := atomic.LoadInt64(&b.issuanceTimeouts)
-				atomic.StoreInt64(&b.issuanceTimeouts, 0)
-				totalIErrors += issuanceErrors
-				totalITimeouts += issuanceTimeouts
 
-				ocspSignings := atomic.LoadInt64(&b.ocspSignings)
-				atomic.StoreInt64(&b.ocspSignings, 0)
+				ocspSignings := b.chartPoints.OCSPLatency.TotalCount()
 				ocspSigningErrors := atomic.LoadInt64(&b.ocspSigningErrors)
-				atomic.StoreInt64(&b.ocspSigningErrors, 0)
 				ocspSigningTimeouts := atomic.LoadInt64(&b.ocspSigningTimeouts)
-				atomic.StoreInt64(&b.ocspSigningTimeouts, 0)
-				totalOErrors += ocspSigningErrors
-				totalOTimeouts += ocspSigningTimeouts
 
-				since := time.Since(prev).Seconds()
-				goodCertRate := float64(issuances) / since
-				errorCertRate := float64(issuanceErrors) / since
-				timeoutCertRate := float64(issuanceTimeouts) / since
-				if b.chartPath != "" {
-					b.chartPoints.IssuanceRate.X = append(b.chartPoints.IssuanceRate.X, now.UTC())
-					b.chartPoints.IssuanceRate.GoodY = append(b.chartPoints.IssuanceRate.GoodY, goodCertRate)
-					b.chartPoints.IssuanceRate.ErrorY = append(b.chartPoints.IssuanceRate.ErrorY, errorCertRate)
-					b.chartPoints.IssuanceRate.TimeoutY = append(b.chartPoints.IssuanceRate.TimeoutY, timeoutCertRate)
-				}
-
-				goodOCSPRate := float64(ocspSignings) / since
-				if b.chartPath != "" {
-					b.chartPoints.OCSPRate.X = append(b.chartPoints.OCSPRate.X, now.UTC())
-					b.chartPoints.OCSPRate.GoodY = append(b.chartPoints.OCSPRate.GoodY, goodOCSPRate)
-				}
+				since := time.Since(b.started).Seconds()
+				goodCertRate := float64(issuances-issuanceErrors-issuanceTimeouts) / since
+				goodOCSPRate := float64(ocspSignings-ocspSigningErrors-ocspSigningTimeouts) / since
 
 				fmt.Printf(
 					"issuance calls: %d (successful calls: %3.2f/s, errors: %d, timeouts: %d), ocsp calls: %d (successful calls: %3.2f/s, errors: %d, timeouts: %d)\n",
-					b.chartPoints.IssuanceLatency.TotalCount(),
+					issuances,
 					goodCertRate,
-					totalIErrors,
-					totalITimeouts,
-					b.chartPoints.OCSPLatency.TotalCount(),
+					issuanceErrors,
+					issuanceTimeouts,
+					ocspSignings,
 					goodOCSPRate,
-					totalOErrors,
-					totalOTimeouts,
+					ocspSigningErrors,
+					ocspSigningTimeouts,
 				)
-				prev = now
 			}
 		}
 	}
@@ -240,7 +203,6 @@ func (b *bencher) sendIssueCertificate() {
 		atomic.AddInt64(&b.issuanceErrors, 1)
 		return
 	}
-	atomic.AddInt64(&b.issuances, 1)
 }
 
 func (b *bencher) sendGenerateOCSP() {
@@ -269,7 +231,6 @@ func (b *bencher) sendGenerateOCSP() {
 		lp.Error = true
 		return
 	}
-	atomic.AddInt64(&b.ocspSignings, 1)
 }
 
 func (b *bencher) asyncSetupSender(action func(), throughput int) {
@@ -493,8 +454,8 @@ func main() {
 			debug:     c.GlobalBool("debug"),
 		}
 		if b.chartPath != "" {
-			b.chartPoints.IssuanceRate.IdealY = float64(issuanceSenders)
-			b.chartPoints.OCSPRate.IdealY = float64(ocspSenders)
+			b.chartPoints.IssuanceSent = issuanceSenders
+			b.chartPoints.OCSPSent = ocspSenders
 		}
 
 		// Setup signal catching and such
