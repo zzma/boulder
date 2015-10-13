@@ -52,7 +52,7 @@ def plot_meta(c_meta, cr_meta, sent, hist, title):
 
     ax3.set_xlabel('Percentile')
 
-    ax1.set_ylabel("Finished calls rate (/s)")
+    ax1.set_ylabel("Finished call rate (/s)")
     ax2.set_ylabel("Call latency (ms)")
     ax3.set_ylabel('Value (ms)')
     ax4.set_ylabel('Count')

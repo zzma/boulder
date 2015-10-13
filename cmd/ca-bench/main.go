@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -133,6 +135,9 @@ type chartData struct {
 type bencher struct {
 	cac core.CertificateAuthority
 
+	issuanceThroughput int64
+	ocspThroughput     int64
+
 	// Pregenerated CSR and OCSP signing request for calls
 	csr         x509.CertificateRequest
 	regID       int64
@@ -189,9 +194,7 @@ func (b *bencher) printStats() {
 					issuanceTimeouts,
 				)
 			}
-			if issuances > 0 && ocspSignings > 0 {
-				fmt.Printf(", ")
-			} else if issuances > 0 {
+			if issuances > 0 && ocspSignings == 0 {
 				fmt.Printf("\n")
 			} else {
 				fmt.Printf(", ")
@@ -266,33 +269,75 @@ func (b *bencher) sendGenerateOCSP() {
 	}
 }
 
-func (b *bencher) asyncSetupSender(action func(), throughput int) {
+func (b *bencher) asyncSetupSender(action func(), throughput *int64) {
 	stopChan := make(chan bool, 1)
 	b.stopChans = append(b.stopChans, stopChan)
+	b.stopWG.Add(1)
 	go func() {
 		for {
 			select {
 			case <-stopChan:
+				b.stopWG.Done()
 				return
 			default:
 				go action()
-				time.Sleep(time.Duration(time.Second.Nanoseconds() / int64(throughput)))
+				time.Sleep(time.Duration(time.Second.Nanoseconds() / atomic.LoadInt64(throughput)))
 			}
 		}
 	}()
 }
 
-func (b *bencher) runAsync(issuanceThroughput int, ocspThroughput int) {
+func (b *bencher) runAsync() {
 	b.started = time.Now()
 	b.stopWG = new(sync.WaitGroup)
 	if !b.hideStats {
 		go b.printStats()
 	}
-	if issuanceThroughput > 0 {
-		b.asyncSetupSender(b.sendIssueCertificate, issuanceThroughput)
+	if b.issuanceThroughput > 0 {
+		b.asyncSetupSender(b.sendIssueCertificate, &b.issuanceThroughput)
 	}
-	if ocspThroughput > 0 {
-		b.asyncSetupSender(b.sendGenerateOCSP, ocspThroughput)
+	if b.ocspThroughput > 0 {
+		b.asyncSetupSender(b.sendGenerateOCSP, &b.ocspThroughput)
+	}
+}
+
+type event struct {
+	After time.Duration
+	SetTo int64
+}
+
+func eventParser(eventString string) ([]event, error) {
+	events := []event{}
+	sections := strings.Split(eventString, ":")
+	for _, s := range sections {
+		fields := strings.Split(s, ",")
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("Invalid event format")
+		}
+		after, err := time.ParseDuration(fields[1])
+		if err != nil {
+			return nil, err
+		}
+		setTo, err := strconv.Atoi(fields[0])
+		if err != nil {
+			return nil, err
+		}
+		if setTo <= 0 {
+			return nil, fmt.Errorf("throughput must be a positive non-zero integer")
+		}
+		events = append(events, event{
+			After: after,
+			SetTo: int64(setTo),
+		})
+	}
+	return events, nil
+}
+
+func (b *bencher) changeThroughput(events []event, throughput *int64, what string) {
+	for _, e := range events {
+		time.Sleep(e.After)
+		atomic.StoreInt64(throughput, e.SetTo)
+		fmt.Printf("Updated %s throughput to %d/s\n", what, e.SetTo)
 	}
 }
 
@@ -302,7 +347,8 @@ func (b *bencher) stop() {
 		stopChan <- true
 	}
 	b.stopWG.Wait()
-	fmt.Printf("Stopped, ran for %s\n", time.Since(b.started))
+
+	fmt.Printf("Stopped, ran for %s\n", humanTime(int(time.Since(b.started).Seconds())))
 	if b.chartPoints.IssuanceLatency.TotalCount() != 0 {
 		fmt.Printf(
 			"\nCertificate Issuance\nCount: %d (%d errors)\nLatency: Max %s, Min %s, Avg %s\n",
@@ -369,11 +415,11 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "issuance",
-			Usage: "How many ca.IssueCertificate RPC calls to send per second (for mode=async)",
+			Usage: "How many ca.IssueCertificate RPC calls to send per second",
 		},
 		cli.IntFlag{
 			Name:  "ocsp",
-			Usage: "How many ca.GenerateOCSP RPC calls to send per second (for mode=async)",
+			Usage: "How many ca.GenerateOCSP RPC calls to send per second",
 		},
 		cli.StringFlag{
 			Name:  "benchTime",
@@ -392,10 +438,6 @@ func main() {
 			Name:  "debugHist",
 			Usage: "Shows some debug information about histograms (byte sizes of HDRHistogram structs)",
 		},
-		cli.StringFlag{
-			Name:  "mode",
-			Usage: "Testing mode (async)",
-		},
 		cli.IntFlag{
 			Name:  "regID",
 			Value: 1,
@@ -409,15 +451,17 @@ func main() {
 			Name:  "printHist",
 			Usage: "Print HDRHistogram structs (using the chartable format)",
 		},
+		cli.StringFlag{
+			Name:  "issuanceEvents",
+			Usage: "Allows changes in issuance throughput over the test (to set throughput to 10 after 5m then 20 after another 10 minutes the format is '10,5m:20,10m')",
+		},
+		cli.StringFlag{
+			Name:  "ocspEvents",
+			Usage: "Allows changes in ocsp throughput over the test (to set throughput to 10 after 5m then 20 after another 10 minutes the format is '10,5m:20,10m')",
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
-		mode := c.GlobalString("mode")
-		if mode != "async" {
-			fmt.Println("mode must be either backpressure or async")
-			return
-		}
-
 		configFileName := c.GlobalString("config")
 		configJSON, err := ioutil.ReadFile(configFileName)
 		cmd.FailOnError(err, "Unable to read config file")
@@ -473,15 +517,28 @@ func main() {
 			return
 		}
 
+		issuanceEventString, ocspEventString := c.GlobalString("issuanceEvents"), c.GlobalString("ocspEvents")
+		issuanceEvents, ocspEvents := []event{}, []event{}
+		if issuanceEventString != "" {
+			issuanceEvents, err = eventParser(issuanceEventString)
+			cmd.FailOnError(err, "Failed to parse issuance events")
+		}
+		if ocspEventString != "" {
+			ocspEvents, err = eventParser(ocspEventString)
+			cmd.FailOnError(err, "Failed to parse ocsp events")
+		}
+
 		statsInterval, err := time.ParseDuration(c.GlobalString("statsInterval"))
 		cmd.FailOnError(err, "Failed to parse statsInterval")
 
 		timeoutDuration := 10 * time.Second
 
 		b := bencher{
-			cac:   cac,
-			csr:   *csr,
-			regID: int64(c.GlobalInt("regID")),
+			cac:                cac,
+			issuanceThroughput: int64(issuanceSenders),
+			ocspThroughput:     int64(ocspSenders),
+			csr:                *csr,
+			regID:              int64(c.GlobalInt("regID")),
 			ocspRequest: core.OCSPSigningRequest{
 				CertDER: cert.DER,
 				Status:  string(core.OCSPStatusGood),
@@ -511,15 +568,20 @@ func main() {
 
 			<-sigChan
 			fmt.Printf("\nInterrupted\n\n")
-			// Can only grab the lock if the stop below hasn't grabbed it first
+			// Can only grab the lock if the stop below hasn't grabbed it first, this is
+			// bad and needs to be fixed...
 			iMu.Lock()
 			b.stop()
 			os.Exit(0)
 		}()
 
-		switch mode {
-		case "async":
-			b.runAsync(issuanceSenders, ocspSenders)
+		b.runAsync()
+
+		if len(issuanceEvents) != 0 {
+			go b.changeThroughput(issuanceEvents, &b.issuanceThroughput, "issuance")
+		}
+		if len(ocspEvents) != 0 {
+			go b.changeThroughput(ocspEvents, &b.ocspThroughput, "ocsp")
 		}
 
 		runtimeStr := c.GlobalString("benchTime")
