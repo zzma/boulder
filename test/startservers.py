@@ -68,7 +68,7 @@ def start(race_detection):
         'boulder-ca',
         'boulder-va',
         'boulder-publisher',
-        'ocsp-updater',
+#        'ocsp-updater',
         'ocsp-responder',
         'ct-test-srv',
         'dns-test-srv'
