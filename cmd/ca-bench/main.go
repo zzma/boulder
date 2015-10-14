@@ -122,13 +122,18 @@ func (cs combinedSeries) MarshalJSON() ([]byte, error) {
 	return jsonSeries, nil
 }
 
+type rateSeries struct {
+	X []time.Time
+	Y []int64
+}
+
 type chartData struct {
 	Issuance        combinedSeries `json:"issuance,omitempty"`
 	IssuanceLatency histWrapper    `json:"issuanceLatency,omitempty"`
-	IssuanceSent    int            `json:"issuanceSent,omitempty"`
+	IssuanceSent    rateSeries     `json:"issuanceSent,omitempty"`
 	OCSP            combinedSeries `json:"ocsp,omitempty"`
 	OCSPLatency     histWrapper    `json:"ocspLatency,omitempty"`
-	OCSPSent        int            `json:"ocspSent,omitempty"`
+	OCSPSent        rateSeries     `json:"ocspSent,omitempty"`
 }
 
 // So many things on this struct... but this is just for benchmarking? ._.
@@ -333,11 +338,13 @@ func eventParser(eventString string) ([]event, error) {
 	return events, nil
 }
 
-func (b *bencher) changeThroughput(events []event, throughput *int64, what string) {
+func (b *bencher) changeThroughput(events []event, throughput *int64, sentStats *rateSeries, what string) {
 	for _, e := range events {
 		time.Sleep(e.After)
 		atomic.StoreInt64(throughput, e.SetTo)
 		fmt.Printf("Updated %s throughput to %d/s\n", what, e.SetTo)
+		sentStats.X = append(sentStats.X, time.Now())
+		sentStats.Y = append(sentStats.Y, e.SetTo)
 	}
 }
 
@@ -553,10 +560,6 @@ func main() {
 			chartPath: c.GlobalString("chartDataPath"),
 			debugHist: c.GlobalBool("debugHist"),
 		}
-		if b.chartPath != "" {
-			b.chartPoints.IssuanceSent = issuanceSenders
-			b.chartPoints.OCSPSent = ocspSenders
-		}
 
 		// Setup signal catching and such
 		iMu := new(sync.Mutex)
@@ -575,13 +578,28 @@ func main() {
 			os.Exit(0)
 		}()
 
+		if b.chartPath != "" {
+			b.chartPoints.IssuanceSent = rateSeries{
+				X: []time.Time{
+					time.Now(),
+				},
+				Y: []int64{int64(issuanceSenders)},
+			}
+			b.chartPoints.OCSPSent = rateSeries{
+				X: []time.Time{
+					time.Now(),
+				},
+				Y: []int64{int64(ocspSenders)},
+			}
+		}
+
 		b.runAsync()
 
 		if len(issuanceEvents) != 0 {
-			go b.changeThroughput(issuanceEvents, &b.issuanceThroughput, "issuance")
+			go b.changeThroughput(issuanceEvents, &b.issuanceThroughput, &b.chartPoints.IssuanceSent, "issuance")
 		}
 		if len(ocspEvents) != 0 {
-			go b.changeThroughput(ocspEvents, &b.ocspThroughput, "ocsp")
+			go b.changeThroughput(ocspEvents, &b.ocspThroughput, &b.chartPoints.OCSPSent, "ocsp")
 		}
 
 		runtimeStr := c.GlobalString("benchTime")
