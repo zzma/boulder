@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -27,8 +26,7 @@ import (
 )
 
 const (
-	testCertDNSName    = "testing.letsencrypt.org"
-	testCertCommonName = "Happy Hacker Benching Cert"
+	testCertDNSName = "bench-testing.letsencrypt.org"
 )
 
 func humanTime(seconds int) string {
@@ -124,8 +122,8 @@ func (cs combinedSeries) MarshalJSON() ([]byte, error) {
 }
 
 type rateSeries struct {
-	X []time.Time
-	Y []int64
+	X []time.Time `json:"x"`
+	Y []int64     `json:"y"`
 }
 
 type chartData struct {
@@ -356,6 +354,18 @@ func (b *bencher) stop() {
 	}
 	b.stopWG.Wait()
 
+	if b.chartPath != "" {
+		now := time.Now()
+		if b.issuanceThroughput > 0 {
+			b.chartPoints.IssuanceSent.X = append(b.chartPoints.IssuanceSent.X, now)
+			b.chartPoints.IssuanceSent.Y = append(b.chartPoints.IssuanceSent.Y, b.issuanceThroughput)
+		}
+		if b.ocspThroughput > 0 {
+			b.chartPoints.OCSPSent.X = append(b.chartPoints.OCSPSent.X, now)
+			b.chartPoints.OCSPSent.Y = append(b.chartPoints.OCSPSent.Y, b.ocspThroughput)
+		}
+	}
+
 	fmt.Printf("Stopped, ran for %s\n", humanTime(int(time.Since(b.started).Seconds())))
 	if b.chartPoints.IssuanceLatency.TotalCount() != 0 {
 		fmt.Printf(
@@ -393,6 +403,7 @@ func (b *bencher) stop() {
 	}
 
 	if b.chartPath != "" {
+
 		chartJSON, err := json.Marshal(b.chartPoints)
 		if err != nil {
 			fmt.Printf("Failed to marshal chart points: %s", err)
@@ -470,7 +481,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "testCertName",
 			Usage: "Change the common name in the CSR used in ca.IssuerCertificate",
-			Value: testCertCommonName,
+			Value: testCertDNSName,
 		},
 	}
 
@@ -501,7 +512,6 @@ func main() {
 		csrDER, err := x509.CreateCertificateRequest(
 			rand.Reader,
 			&x509.CertificateRequest{
-				Subject:  pkix.Name{CommonName: testCertDNSName},
 				DNSNames: []string{testCN},
 			},
 			randKey,

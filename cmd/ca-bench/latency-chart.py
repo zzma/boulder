@@ -19,7 +19,6 @@ def create_latency_meta(data, frames):
             calls['y'] = calls['y'].divide(1000000)
             calls = calls.set_index('x')
             call_rate = calls.resample('S', how='count')
-            # call_rate['y'] = call_rate['y'].divide(5)
             cm.append([calls, f[0], f[1], f[2]])
             crm.append([call_rate, f[0], f[1]])
     return cm, crm
@@ -43,7 +42,18 @@ def plot_meta(c_meta, cr_meta, sent, hist, title):
     cY = [hist['countY'][0]] + cY
     ax4.plot(range(len(hist['x'])), cY, '-', label='count', color='blue')
 
-    ax1.axhline(sent, color='black', linestyle='--', label='sent')
+    # create sent throughput series
+    x = []
+    y = []
+    for i, v in enumerate(sent['x']):
+        x.append(sent['x'][i])
+        y.append(sent['y'][i])
+        if i != len(sent['x'])-1:
+            x.append(sent['x'][i+1])
+            y.append(sent['y'][i])
+
+    ax1.plot_date(x, y, '--', color='black', label='sent')
+
     ax2.axhline(10000, color='red', linestyle='--', label='hard maximum')
     ax3.axhline(10000, linestyle='--', label='hard maximum', color='red')
 
@@ -99,6 +109,8 @@ if stuff.get('issuance', False):
     chartPath = "issuance.png"
     if args.outputPrefix != None:
         chartPath = args.outputPrefix+'-'+chartPath
+    else:
+        chartPath = path.basename(args.chartData)+'-'+chartPath
     if args.outputDir != None:
         chartPath = os.path.join(args.outputDir, chartPath)
     plt.savefig(chartPath, bbox_inches='tight')
@@ -111,6 +123,8 @@ if stuff.get('ocsp', False):
     chartPath = "ocsp.png"
     if args.outputPrefix != None:
         chartPath = args.outputPrefix+'-'+chartPath
+    else:
+        chartPath = path.basename(args.chartData)+'-'+chartPath
     if args.outputDir != None:
         chartPath = os.path.join(args.outputDir, chartPath)
     plt.savefig(chartPath, bbox_inches='tight')
