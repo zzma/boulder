@@ -110,7 +110,7 @@ if stuff.get('issuance', False):
     if args.outputPrefix != None:
         chartPath = args.outputPrefix+'-'+chartPath
     else:
-        chartPath = path.basename(args.chartData)+'-'+chartPath
+        chartPath = os.path.basename(args.chartData)+'-'+chartPath
     if args.outputDir != None:
         chartPath = os.path.join(args.outputDir, chartPath)
     plt.savefig(chartPath, bbox_inches='tight')
@@ -124,7 +124,7 @@ if stuff.get('ocsp', False):
     if args.outputPrefix != None:
         chartPath = args.outputPrefix+'-'+chartPath
     else:
-        chartPath = path.basename(args.chartData)+'-'+chartPath
+        chartPath = os.path.basename(args.chartData)+'-'+chartPath
     if args.outputDir != None:
         chartPath = os.path.join(args.outputDir, chartPath)
     plt.savefig(chartPath, bbox_inches='tight')
