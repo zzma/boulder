@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math/big"
 	"os"
 	"os/signal"
 	"strconv"
@@ -46,8 +45,10 @@ func humanTime(seconds int) string {
 	if minutes > 0 {
 		s += fmt.Sprintf("%dm", minutes)
 	}
-	if seconds >= 0 {
+	if seconds > 0 {
 		s += fmt.Sprintf("%ds", seconds)
+	} else if hours == 0 && minutes == 0 {
+		s = "0s"
 	}
 	return s
 }
@@ -466,6 +467,11 @@ func main() {
 			Name:  "ocspEvents",
 			Usage: "Allows changes in ocsp throughput over the test (to set throughput to 10 after 5m then 20 after another 10 minutes the format is '10,5m:20,10m')",
 		},
+		cli.StringFlag{
+			Name:  "testCertName",
+			Usage: "Change the common name in the CSR used in ca.IssuerCertificate",
+			Value: testCertCommonName,
+		},
 	}
 
 	app.Action = func(c *cli.Context) {
@@ -491,27 +497,17 @@ func main() {
 
 		randKey, err := rsa.GenerateKey(rand.Reader, 2048)
 		cmd.FailOnError(err, "Failed to create test key")
+		testCN := c.GlobalString("testCertName")
 		csrDER, err := x509.CreateCertificateRequest(
 			rand.Reader,
 			&x509.CertificateRequest{
 				Subject:  pkix.Name{CommonName: testCertDNSName},
-				DNSNames: []string{testCertDNSName},
+				DNSNames: []string{testCN},
 			},
 			randKey,
 		)
 		csr, err := x509.ParseCertificateRequest(csrDER)
 		cmd.FailOnError(err, "Failed to parse generated CSR")
-
-		now := time.Now()
-		template := &x509.Certificate{
-			NotBefore:             now,
-			NotAfter:              now.Add(time.Hour),
-			Subject:               pkix.Name{CommonName: testCertCommonName},
-			BasicConstraintsValid: true,
-		}
-		serialNumber, err := rand.Int(rand.Reader, big.NewInt(1000))
-		cmd.FailOnError(err, "Failed to generate random serial number")
-		template.SerialNumber = serialNumber
 
 		cert, err := cac.IssueCertificate(*csr, int64(c.GlobalInt("regID")))
 		cmd.FailOnError(err, "Failed to generate test certificate for OCSP signing request")
