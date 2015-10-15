@@ -58,7 +58,7 @@ def plot_meta(c_meta, cr_meta, sent, hist, title):
     ax3.axhline(10000, linestyle='--', label='hard maximum', color='red')
 
     ax3.set_xticks(range(len(hist['x'])))
-    ax3.set_xticklabels([str(x)[0:6] for x in hist['x']])
+    ax3.set_xticklabels([str(x)[0:7] for x in hist['x']])
 
     ax3.set_xlabel('Percentile')
 
