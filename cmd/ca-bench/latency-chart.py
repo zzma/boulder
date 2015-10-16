@@ -110,7 +110,7 @@ if stuff.get('issuance', False):
     if args.outputPrefix != None:
         chartPath = args.outputPrefix+'-'+chartPath
     else:
-        chartPath = os.path.basename(args.chartData)+'-'+chartPath
+        chartPath = os.path.splitext(os.path.basename(args.chartData))[0]+'-'+chartPath
     if args.outputDir != None:
         chartPath = os.path.join(args.outputDir, chartPath)
     plt.savefig(chartPath, bbox_inches='tight')
