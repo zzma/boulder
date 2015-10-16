@@ -28,12 +28,12 @@ GRANT SELECT,INSERT,UPDATE ON registrations TO 'sa'@'localhost';
 GRANT SELECT,INSERT,UPDATE ON challenges TO 'sa'@'localhost';
 
 -- OCSP Responder
-GRANT SELECT ON certificateStatus TO 'ocsp_resp'@'localhost';
-GRANT SELECT ON ocspResponses TO 'ocsp_resp'@'localhost';
+GRANT SELECT ON certificateStatus TO 'ocsp-responder'@'localhost';
+GRANT SELECT ON ocspResponses TO 'ocsp-responder'@'localhost';
 
 -- OCSP Generator Tool (Updater)
-GRANT INSERT ON ocspResponses TO 'ocsp_update'@'localhost';
-GRANT SELECT ON certificates TO 'ocsp_update'@'localhost';
+GRANT INSERT ON ocspResponses TO 'ocsp-updater'@'localhost';
+GRANT SELECT ON certificates TO 'ocsp-updater'@'localhost';
 GRANT SELECT,UPDATE ON certificateStatus TO 'ocsp_update'@'localhost';
 
 -- Revoker Tool
@@ -42,12 +42,12 @@ GRANT SELECT ON certificates TO 'revoker'@'localhost';
 GRANT SELECT,INSERT ON deniedCSRs TO 'revoker'@'localhost';
 
 -- External Cert Importer
-GRANT SELECT,INSERT,UPDATE,DELETE ON identifierData TO 'importer'@'localhost';
-GRANT SELECT,INSERT,UPDATE,DELETE ON externalCerts TO 'importer'@'localhost';
+GRANT SELECT,INSERT,UPDATE,DELETE ON identifierData TO 'cert-importer'@'localhost';
+GRANT SELECT,INSERT,UPDATE,DELETE ON externalCerts TO 'cert-importer'@'localhost';
 
 -- Expiration mailer
 GRANT SELECT ON certificates TO 'mailer'@'localhost';
-GRANT SELECT,UPDATE ON certificateStatus TO 'mailer'@'localhost';
+GRANT SELECT ON certificateStatus TO 'mailer'@'localhost';
 
 -- Cert checker
 GRANT SELECT ON certificates TO 'cert_checker'@'localhost';
