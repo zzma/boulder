@@ -30,7 +30,7 @@ import (
 	"github.com/letsencrypt/boulder/test"
 )
 
-const dbConnStr = "mysql+tcp://boulder@localhost:3306/boulder_sa_test"
+const dbConnStr = "mysql+tcp://sa@localhost:3306/boulder_sa_test"
 
 var log = mocks.UseMockLog()
 
@@ -50,7 +50,8 @@ func initSA(t *testing.T) (*SQLStorageAuthority, clock.FakeClock, func()) {
 	if err != nil {
 		t.Fatalf("Failed to create SA: %s", err)
 	}
-	cleanUp := test.ResetTestDatabase(t, dbMap.Db)
+
+	cleanUp := test.ResetSATestDatabase(t)
 	return sa, fc, cleanUp
 }
 
@@ -142,6 +143,29 @@ func TestNoSuchRegistrationErrors(t *testing.T) {
 	if _, ok := err.(core.NoSuchRegistrationError); !ok {
 		t.Errorf("UpdateRegistration: expected a NoSuchRegistrationError, got %T type error (%v)", err, err)
 	}
+}
+
+func TestCountPendingAuthorizations(t *testing.T) {
+	sa, fc, cleanUp := initSA(t)
+	defer cleanUp()
+
+	reg := satest.CreateWorkingRegistration(t, sa)
+	expires := fc.Now().Add(time.Hour)
+	pendingAuthz := core.Authorization{
+		RegistrationID: reg.ID,
+		Expires:        &expires,
+	}
+
+	pendingAuthz, err := sa.NewPendingAuthorization(pendingAuthz)
+	test.AssertNotError(t, err, "Couldn't create new pending authorization")
+	count, err := sa.CountPendingAuthorizations(reg.ID)
+	test.AssertNotError(t, err, "Couldn't count pending authorizations")
+	test.AssertEquals(t, count, 1)
+
+	fc.Add(2 * time.Hour)
+	count, err = sa.CountPendingAuthorizations(reg.ID)
+	test.AssertNotError(t, err, "Couldn't count pending authorizations")
+	test.AssertEquals(t, count, 0)
 }
 
 func TestAddAuthorization(t *testing.T) {

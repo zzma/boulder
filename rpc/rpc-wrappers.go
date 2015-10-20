@@ -40,6 +40,7 @@ const (
 	MethodNewCertificate                    = "NewCertificate"                    // RA
 	MethodUpdateRegistration                = "UpdateRegistration"                // RA, SA
 	MethodUpdateAuthorization               = "UpdateAuthorization"               // RA
+	MethodRevokeCertificate                 = "RevokeCertificate"                 // CA
 	MethodRevokeCertificateWithReg          = "RevokeCertificateWithReg"          // RA
 	MethodAdministrativelyRevokeCertificate = "AdministrativelyRevokeCertificate" // RA
 	MethodOnValidationUpdate                = "OnValidationUpdate"                // RA
@@ -63,6 +64,7 @@ const (
 	MethodCountCertificatesRange            = "CountCertificatesRange"            // SA
 	MethodCountCertificatesByNames          = "CountCertificatesByNames"          // SA
 	MethodCountRegistrationsByIP            = "CountRegistrationsByIP"            // SA
+	MethodCountPendingAuthorizations        = "CountPendingAuthorizations"        // SA
 	MethodGetSCTReceipt                     = "GetSCTReceipt"                     // SA
 	MethodAddSCTReceipt                     = "AddSCTReceipt"                     // SA
 	MethodSubmitToCT                        = "SubmitToCT"                        // Pub
@@ -155,6 +157,10 @@ type countRegistrationsByIPRequest struct {
 	IP       net.IP
 	Earliest time.Time
 	Latest   time.Time
+}
+
+type countPendingAuthorizationsRequest struct {
+	RegID int64
 }
 
 // Response structs
@@ -658,6 +664,19 @@ func NewCertificateAuthorityServer(rpc Server, impl core.CertificateAuthority) (
 		return
 	})
 
+	rpc.Handle(MethodRevokeCertificate, func(req []byte) (response []byte, err error) {
+		var revokeReq revokeCertificateRequest
+		err = json.Unmarshal(req, &revokeReq)
+		if err != nil {
+			// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+			errorCondition(MethodRevokeCertificate, err, req)
+			return
+		}
+
+		err = impl.RevokeCertificate(revokeReq.Serial, revokeReq.ReasonCode)
+		return
+	})
+
 	rpc.Handle(MethodGenerateOCSP, func(req []byte) (response []byte, err error) {
 		var xferObj core.OCSPSigningRequest
 		err = json.Unmarshal(req, &xferObj)
@@ -705,6 +724,23 @@ func (cac CertificateAuthorityClient) IssueCertificate(csr x509.CertificateReque
 	}
 
 	err = json.Unmarshal(jsonResponse, &cert)
+	return
+}
+
+// RevokeCertificate sends a request to revoke a certificate
+func (cac CertificateAuthorityClient) RevokeCertificate(serial string, reasonCode core.RevocationCode) (err error) {
+	var revokeReq revokeCertificateRequest
+	revokeReq.Serial = serial
+	revokeReq.ReasonCode = reasonCode
+
+	data, err := json.Marshal(revokeReq)
+	if err != nil {
+		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+		errorCondition(MethodRevokeCertificate, err, revokeReq)
+		return
+	}
+
+	_, err = cac.rpc.DispatchSync(MethodRevokeCertificate, data)
 	return
 }
 
@@ -1026,6 +1062,20 @@ func NewStorageAuthorityServer(rpc Server, impl core.StorageAuthority) error {
 		}
 
 		count, err := impl.CountRegistrationsByIP(cReq.IP, cReq.Earliest, cReq.Latest)
+		if err != nil {
+			return
+		}
+		return json.Marshal(count)
+	})
+
+	rpc.Handle(MethodCountPendingAuthorizations, func(req []byte) (response []byte, err error) {
+		var cReq countPendingAuthorizationsRequest
+		err = json.Unmarshal(req, &cReq)
+		if err != nil {
+			return
+		}
+
+		count, err := impl.CountPendingAuthorizations(cReq.RegID)
 		if err != nil {
 			return
 		}
@@ -1369,6 +1419,23 @@ func (cac StorageAuthorityClient) CountRegistrationsByIP(ip net.IP, earliest, la
 		return
 	}
 	response, err := cac.rpc.DispatchSync(MethodCountRegistrationsByIP, data)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(response, &count)
+	return
+}
+
+// CountPendingAuthorizations calls CountPendingAuthorizations on the remote
+// StorageAuthority.
+func (cac StorageAuthorityClient) CountPendingAuthorizations(regID int64) (count int, err error) {
+	var cReq countPendingAuthorizationsRequest
+	cReq.RegID = regID
+	data, err := json.Marshal(cReq)
+	if err != nil {
+		return
+	}
+	response, err := cac.rpc.DispatchSync(MethodCountPendingAuthorizations, data)
 	if err != nil {
 		return
 	}

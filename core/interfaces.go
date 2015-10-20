@@ -91,6 +91,7 @@ type ValidationAuthority interface {
 type CertificateAuthority interface {
 	// [RegistrationAuthority]
 	IssueCertificate(x509.CertificateRequest, int64) (Certificate, error)
+	RevokeCertificate(string, RevocationCode) error
 	GenerateOCSP(OCSPSigningRequest) ([]byte, error)
 }
 
@@ -112,6 +113,7 @@ type StorageGetter interface {
 	CountCertificatesRange(time.Time, time.Time) (int64, error)
 	CountCertificatesByNames([]string, time.Time, time.Time) (map[string]int, error)
 	CountRegistrationsByIP(net.IP, time.Time, time.Time) (int, error)
+	CountPendingAuthorizations(regID int64) (int, error)
 	GetSCTReceipt(string, string) (SignedCertificateTimestamp, error)
 }
 

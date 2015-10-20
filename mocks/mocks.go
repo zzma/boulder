@@ -111,6 +111,10 @@ func (mock *DNSResolver) LookupCAA(domain string) ([]*dns.CAA, time.Duration, er
 		record.Tag = "issue"
 		record.Value = "letsencrypt.org"
 		results = append(results, &record)
+	case "com":
+		// Nothing should ever call this, since CAA checking should stop when it
+		// reaches a public suffix.
+		fallthrough
 	case "servfail.com":
 		return results, 0, fmt.Errorf("SERVFAIL")
 	}
@@ -333,6 +337,11 @@ func (sa *StorageAuthority) CountCertificatesByNames(_ []string, _, _ time.Time)
 
 // CountRegistrationsByIP is a mock
 func (sa *StorageAuthority) CountRegistrationsByIP(_ net.IP, _, _ time.Time) (int, error) {
+	return 0, nil
+}
+
+// CountPendingAuthorizations is a mock
+func (sa *StorageAuthority) CountPendingAuthorizations(_ int64) (int, error) {
 	return 0, nil
 }
 
