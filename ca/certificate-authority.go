@@ -17,8 +17,10 @@ import (
 	"io/ioutil"
 	"math/big"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"
@@ -59,19 +61,28 @@ type CertificateAuthorityImpl struct {
 	Publisher      core.Publisher
 	Clk            clock.Clock // TODO(jmhodges): should be private, like log
 	log            *blog.AuditLogger
+	stats          statsd.Statter
 	Prefix         int // Prepended to the serial number
 	ValidityPeriod time.Duration
 	NotAfter       time.Time
 	MaxNames       int
+	// Most errors that come back from actual sign requests can be considered
+	// nonrecoverable without manual intervention. They result from either a
+	// configuration problem or device error. Once we reach a certain (low)
+	// threshold of signing errors, we start returning
+	// core.ServiceUnavailableError for all requests until restarted.
+	signingErrors int32
+	maxErrors     int32
 }
 
-// NewCertificateAuthorityImpl creates a CA that talks to a remote CFSSL
-// instance.  (To use a local signer, simply instantiate CertificateAuthorityImpl
-// directly.)  Communications with the CA are authenticated with MACs,
-// using CFSSL's authenticated signature scheme.  A CA created in this way
-// issues for a single profile on the remote signer, which is indicated
-// by name in this constructor.
-func NewCertificateAuthorityImpl(config cmd.CAConfig, clk clock.Clock, issuerCert string) (*CertificateAuthorityImpl, error) {
+// NewCertificateAuthorityImpl creates a CA instance.
+func NewCertificateAuthorityImpl(
+	config cmd.CAConfig,
+	clk clock.Clock,
+	stats statsd.Statter,
+	log *blog.AuditLogger,
+	issuerCert string,
+) (*CertificateAuthorityImpl, error) {
 	var ca *CertificateAuthorityImpl
 	var err error
 	logger := blog.GetAuditLogger()
@@ -130,8 +141,10 @@ func NewCertificateAuthorityImpl(config cmd.CAConfig, clk clock.Clock, issuerCer
 		profile:    config.Profile,
 		Prefix:     config.SerialPrefix,
 		Clk:        clk,
-		log:        logger,
+		log:        log,
+		stats:      stats,
 		NotAfter:   issuer.NotAfter,
+		maxErrors:  2,
 	}
 
 	if config.Expiry == "" {
@@ -174,6 +187,9 @@ func loadKey(keyConfig cmd.KeyConfig) (priv crypto.Signer, err error) {
 
 // GenerateOCSP produces a new OCSP response and returns it
 func (ca *CertificateAuthorityImpl) GenerateOCSP(xferObj core.OCSPSigningRequest) ([]byte, error) {
+	if ca.signingErrors >= ca.maxErrors {
+		return nil, core.ServiceUnavailableError("service unavailable")
+	}
 	cert, err := x509.ParseCertificate(xferObj.CertDER)
 	if err != nil {
 		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
@@ -189,6 +205,13 @@ func (ca *CertificateAuthorityImpl) GenerateOCSP(xferObj core.OCSPSigningRequest
 	}
 
 	ocspResponse, err := ca.OCSPSigner.Sign(signRequest)
+	if err != nil {
+		atomic.AddInt32(&ca.signingErrors, 1)
+		ca.stats.SetInt("CA.SignErrors", int64(ca.signingErrors), 1)
+		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
+		ca.log.Audit(fmt.Sprintf("Error signing OCSP: serial=[%s] err=[%v]",
+			core.SerialToString(cert.SerialNumber), err))
+	}
 	return ocspResponse, err
 }
 
@@ -202,6 +225,10 @@ func (ca *CertificateAuthorityImpl) RevokeCertificate(serial string, reasonCode 
 // enforcing all policies. Names (domains) in the CertificateRequest will be
 // lowercased before storage.
 func (ca *CertificateAuthorityImpl) IssueCertificate(csr x509.CertificateRequest, regID int64) (core.Certificate, error) {
+	if ca.signingErrors >= ca.maxErrors {
+		return core.Certificate{}, core.ServiceUnavailableError("service unavailable")
+	}
+
 	emptyCert := core.Certificate{}
 	var err error
 	key, ok := csr.PublicKey.(crypto.PublicKey)
@@ -310,16 +337,18 @@ func (ca *CertificateAuthorityImpl) IssueCertificate(csr x509.CertificateRequest
 
 	certPEM, err := ca.Signer.Sign(req)
 	if err != nil {
+		atomic.AddInt32(&ca.signingErrors, 1)
+		ca.stats.SetInt("CA.SignErrors", int64(ca.signingErrors), 1)
 		err = core.InternalServerError(err.Error())
 		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-		ca.log.Audit(fmt.Sprintf("Signer failed, rolling back: serial=[%s] err=[%v]", serialHex, err))
+		ca.log.Audit(fmt.Sprintf("Signer failed: serial=[%s] err=[%v]", serialHex, err))
 		return emptyCert, err
 	}
 
 	if len(certPEM) == 0 {
 		err = core.InternalServerError("No certificate returned by server")
 		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-		ca.log.Audit(fmt.Sprintf("PEM empty from Signer, rolling back: serial=[%s] err=[%v]", serialHex, err))
+		ca.log.Audit(fmt.Sprintf("PEM empty from Signer: serial=[%s] err=[%v]", serialHex, err))
 		return emptyCert, err
 	}
 
@@ -327,7 +356,7 @@ func (ca *CertificateAuthorityImpl) IssueCertificate(csr x509.CertificateRequest
 	if block == nil || block.Type != "CERTIFICATE" {
 		err = core.InternalServerError("Invalid certificate value returned")
 		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-		ca.log.Audit(fmt.Sprintf("PEM decode error, aborting and rolling back issuance: pem=[%s] err=[%v]", certPEM, err))
+		ca.log.Audit(fmt.Sprintf("PEM decode error, aborting: pem=[%s] err=[%v]", certPEM, err))
 		return emptyCert, err
 	}
 	certDER := block.Bytes
@@ -340,7 +369,7 @@ func (ca *CertificateAuthorityImpl) IssueCertificate(csr x509.CertificateRequest
 	if err != nil {
 		err = core.InternalServerError(err.Error())
 		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-		ca.log.Audit(fmt.Sprintf("Uncaught error, aborting and rolling back issuance: pem=[%s] err=[%v]", certPEM, err))
+		ca.log.Audit(fmt.Sprintf("Uncaught error, aborting: pem=[%s] err=[%v]", certPEM, err))
 		return emptyCert, err
 	}
 
