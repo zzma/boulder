@@ -116,8 +116,9 @@ def ocsp_verify(cert_file, ocsp_response):
     ocsp_resp_file = os.path.join(tempdir, "ocsp.resp")
     with open(ocsp_resp_file, "w") as f:
         f.write(ocsp_response)
-    ocsp_verify_cmd = """openssl ocsp -issuer ../test-ca.pem -CAfile ../test-ca.pem \
-        -cert %s -respin %s""" % (cert_file, ocsp_resp_file)
+    ocsp_verify_cmd = """openssl ocsp -no_nonce -issuer ../test-ca.pem \
+      -verify_other ../test-ca.pem -CAfile ../test-root.pem \
+      -cert %s -respin %s""" % (cert_file, ocsp_resp_file)
     print ocsp_verify_cmd
     try:
         output = subprocess.check_output(ocsp_verify_cmd, shell=True)
@@ -207,7 +208,7 @@ def run_client_tests():
 @atexit.register
 def cleanup():
     import shutil
-    shutil.rmtree(tempdir)
+    #shutil.rmtree(tempdir)
     if exit_status == ExitStatus.OK:
         print("\n\nSUCCESS")
     else:
@@ -219,6 +220,6 @@ tempdir = tempfile.mkdtemp()
 if not startservers.start(race_detection=True):
     die(ExitStatus.Error)
 run_node_test()
-run_client_tests()
+#run_client_tests()
 if not startservers.check():
     die(ExitStatus.Error)
