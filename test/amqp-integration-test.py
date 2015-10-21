@@ -121,11 +121,19 @@ def ocsp_verify(cert_file, ocsp_response):
       -cert %s -respin %s""" % (cert_file, ocsp_resp_file)
     print ocsp_verify_cmd
     try:
-        output = subprocess.check_output(ocsp_verify_cmd, shell=True)
+        output = subprocess.check_output(ocsp_verify_cmd,
+            shell=True, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         output = e.output
         print output
         print "subprocess returned non-zero: %s" % e
+        die(ExitStatus.OCSPFailure)
+    # OpenSSL doesn't always return non-zero when response verify fails, so we
+    # also look for the string "Response Verify OK".
+    verify_ok = "Response verify OK"
+    if not re.search(verify_ok, output):
+        print output
+        print "OpenSSL did not print '%s'." % verify_ok
         die(ExitStatus.OCSPFailure)
     return output
 
