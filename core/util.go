@@ -26,9 +26,11 @@ import (
 	"io"
 	"io/ioutil"
 	"math/big"
+	mrand "math/rand"
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
 	blog "github.com/letsencrypt/boulder/log"
@@ -535,4 +537,29 @@ func LoadCert(filename string) (cert *x509.Certificate, err error) {
 	}
 	cert, err = x509.ParseCertificate(block.Bytes)
 	return
+}
+
+const retryJitter = 0.2
+
+// RetryBackoff calculates a backoff time based on number of retries, adapted from
+// https://github.com/grpc/grpc-go/blob/master/rpc_util.go#L311
+func RetryBackoff(retries int, base, max time.Duration, factor float64) time.Duration {
+	if retries == 0 {
+		return 0
+	}
+	backoff, fMax := float64(base), float64(max)
+	for backoff < fMax && retries > 1 {
+		backoff *= factor
+		retries--
+	}
+	if backoff > fMax {
+		backoff = fMax
+	}
+	// Randomize backoff delays so that if a cluster of requests start at
+	// the same time, they won't operate in lockstep.
+	backoff *= 1 + retryJitter*(mrand.Float64()*2-1)
+	if backoff < 0 {
+		return 0
+	}
+	return time.Duration(backoff)
 }
