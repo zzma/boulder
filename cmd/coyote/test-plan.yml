@@ -1,0 +1,32 @@
+# plan format:
+# - {after} {thing to mess with} {how to mess with it} {arguments}
+
+run-images:
+  # boulder services
+  - boulder-wfe
+  - boulder-ra
+  - boulder-sa
+  - boulder-va
+  - boulder-publisher
+  - ocsp-updater
+  - ocsp-responder
+
+  # peripheral services
+  - rabbitmq
+  - mariadb
+  - test-dns
+  - test-ct
+
+plan:
+  # mess with maria
+  - 10m maria exec LOCK TABLES registrations
+  - 15m maria exec UNLOCK TABLES
+
+  # mess with the network
+  - 20m network partition boulder-ra<->boulder-sa
+  - 25m network heal-partition boulder-ra<->boulder-sa
+  - 25m network rate test-ct 100kbps
+
+expected:
+  alive:
+    - all
