@@ -217,8 +217,8 @@ func (c *coyote) printPlan() {
 	fmt.Println()
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintln(w, " \tAfter\tSection\tDo")
-	fmt.Fprintln(w, " \t-----\t-------\t--")
+	fmt.Fprintln(w, " \tAfter\tSection\tAction")
+	fmt.Fprintln(w, " \t-----\t-------\t------")
 	for _, a := range c.plan {
 		fmt.Fprintf(w, " \t%s\t%s\t%s\n", a.after, a.section, a.desc)
 	}
