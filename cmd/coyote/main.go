@@ -34,15 +34,19 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"text/tabwriter"
 	"time"
+	"unicode"
 
 	"github.com/codegangsta/cli"
+	"gopkg.in/yaml.v2"
+
 	"github.com/letsencrypt/boulder/cmd"
 )
 
@@ -54,84 +58,88 @@ var (
 	mariaErrata = []string{""}
 )
 
+func splitIntoArgs(args string) []string {
+	lastQuote := rune(0)
+	f := func(c rune) bool {
+		switch {
+		case c == lastQuote:
+			lastQuote = rune(0)
+			return false
+		case lastQuote != rune(0):
+			return false
+		case unicode.In(c, unicode.Quotation_Mark):
+			lastQuote = c
+			return false
+		default:
+			return unicode.IsSpace(c)
+		}
+	}
+	return strings.FieldsFunc(args, f)
+}
+
 func execCommand(bin string, args []string) error {
 	cmd := exec.Command(bin, args...)
-	return cmd.Run()
+	buf := new(bytes.Buffer)
+	cmd.Stdout = buf
+	cmd.Stderr = buf
+	err := cmd.Run()
+	fmt.Println(buf.String())
+	return err
 }
 
-func rabbitTool(action string) error {
-	return nil
+func (c *coyote) rabbitTool(action string) error {
+	return execCommand(c.rabbitBin, append(c.rabbitErrata, splitIntoArgs(action)...))
 }
 
-func parseRabbitCommand(cmd string) (func() string, error) {
-	fields := strings.SplitN(cmd, " ", 1)
-	if len(fields) < 2 {
-		return nil, fmt.Errorf("invalid action")
+func (c *coyote) parseRabbitCommand(cmd string) (func() error, string, error) {
+	fields := strings.SplitN(cmd, " ", 2)
+	if len(fields) != 2 {
+		return nil, "", fmt.Errorf("Invalid action format")
 	}
 	cmd = fields[0]
 	args := fields[1]
 	switch {
-	case strings.HasPrefix(cmd, "delete-"):
-	case cmd == "purge":
-		return func() string {
-			desc := fmt.Sprintf("[RabbitMQ] Purged queue %s", args)
-			err := rabbitTool(fmt.Sprintf("purge %s", args))
-			if err != nil {
-				desc = fmt.Sprintf("%s. ERROR: %s", desc, err)
-			}
-			return desc
-		}, nil
+	case cmd == "admin":
+		return func() error {
+			return c.rabbitTool(fmt.Sprintf("%s", args))
+		}, fmt.Sprintf("Executing admin tool statement \"%s\"", args), nil
+	default:
+		return nil, "", fmt.Errorf("Invalid rabbit subcommand")
 	}
-	return nil, nil
 }
 
-func mariaTool(action string) error {
-	return nil
+func (c *coyote) mariaTool(args []string) error {
+	return execCommand(c.mariaBin, append(c.mariaErrata, args...))
 }
 
-func parseMariaCommand(cmd string) (func() string, error) {
-	fields := strings.SplitN(cmd, " ", 1)
-	if len(fields) < 2 {
-		return nil, fmt.Errorf("invalid action")
+func (c *coyote) parseMariaCommand(cmd string) (func() error, string, error) {
+	fields := strings.SplitN(cmd, " ", 2)
+	if len(fields) != 2 {
+		return nil, "", fmt.Errorf("Invalid action format")
 	}
 	cmd = fields[0]
 	args := fields[1]
 	switch {
 	case cmd == "exec":
-		desc := fmt.Sprintf("[MariaDB] Executed '%s'", args)
-		err := mariaTool(fmt.Sprintf("-e '%s'", args))
-		if err != nil {
-			desc = fmt.Sprintf("%s. ERROR: %s", desc, err)
-		}
+		return func() error {
+			return c.mariaTool([]string{"-e", args})
+		}, fmt.Sprintf("Executing statement \"%s\"", args), nil
+	default:
+		return nil, "", fmt.Errorf("Invalid maria subcommand")
 	}
-	return nil, nil
-}
-
-func parseNetworkCommand(cmd string) (func() string, error) {
-	return nil, nil
 }
 
 type action struct {
-	do    func() string
-	after time.Duration
-}
-
-type event struct {
-	action string
-	at     time.Time
-	took   time.Duration
-}
-
-type coyote struct {
-	eventLog chan event
-	plan     []action
-	wg       sync.WaitGroup
+	do      func() error
+	after   time.Duration
+	desc    string
+	section string
 }
 
 func (c *coyote) loadActionPlan(actionStrings []string) error {
 	var actions []action
 	for _, a := range actionStrings {
-		fields := strings.SplitN(a, " ", 2)
+		fields := strings.SplitN(a, " ", 3)
 		if len(fields) != 3 {
 			return fmt.Errorf("Invalid action format")
 		}
@@ -139,27 +147,36 @@ func (c *coyote) loadActionPlan(actionStrings []string) error {
 		if err != nil {
 			return err
 		}
-		var do func() string
+		if after >= c.runtime {
+			return fmt.Errorf("Cannot run action after finishing")
+		}
+		var do func() error
+		var desc string
 		switch fields[1] {
 		case "rabbit":
-			do, err = parseRabbitCommand(fields[2])
+			do, desc, err = c.parseRabbitCommand(fields[2])
 			if err != nil {
 				return err
 			}
 		case "maria":
-			do, err = parseMariaCommand(fields[2])
+			do, desc, err = c.parseMariaCommand(fields[2])
 			if err != nil {
 				return err
 			}
-		case "network":
-			do, err = parseNetworkCommand(fields[2])
-			if err != nil {
-				return err
+		case "command":
+			desc = fmt.Sprintf("Executing %s", fields[2])
+			do = func() error {
+				parts := strings.SplitN(fields[2], " ", 2)
+				return execCommand(parts[0], splitIntoArgs(parts[1]))
 			}
+		default:
+			return fmt.Errorf("Invalid command")
 		}
 		actions = append(actions, action{
-			after: after,
-			do:    do,
+			after:   after,
+			do:      do,
+			desc:    desc,
+			section: fields[1],
 		})
 	}
 
@@ -171,31 +188,61 @@ func (c *coyote) loadActionPlan(actionStrings []string) error {
 	return nil
 }
 
+type planFile struct {
+	Rabbit struct {
+		Bin    string `yaml:"bin"`
+		Errata string `yaml:"errata"`
+	} `yaml:"rabbit"`
+	Maria struct {
+		Bin    string `yaml:"bin"`
+		Errata string `yaml:"errata"`
+	} `yaml:"maria"`
+	Runtime cmd.ConfigDuration `yaml:"runtime"`
+	Actions []string           `yaml:"actions"`
+}
+
+type coyote struct {
+	plan    []action
+	runtime time.Duration
+
+	rabbitBin    string
+	rabbitErrata []string
+
+	mariaBin    string
+	mariaErrata []string
+}
+
+func (c *coyote) printPlan() {
+	fmt.Println("Test plan")
+	fmt.Printf("#########\n\n")
+	fmt.Printf("Runtime: %s\n", c.runtime)
+
+	fmt.Println()
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
+	fmt.Fprintln(w, " \tAfter\tSection\tDo")
+	fmt.Fprintln(w, " \t-----\t-------\t--")
+	for _, a := range c.plan {
+		fmt.Fprintf(w, " \t%s\t%s\t%s\n", a.after, a.section, a.desc)
+	}
+	w.Flush()
+	fmt.Println()
+}
+
 func (c *coyote) executePlan() {
 	for _, a := range c.plan {
-		c.wg.Add(1)
 		go func(a action) {
 			<-time.After(a.after)
 			s := time.Now()
-			eventDesc := a.do()
-			c.eventLog <- event{
-				action: eventDesc,
-				at:     time.Now(),
-				took:   time.Since(s),
+			err := a.do()
+			if err != nil {
+				a.desc = fmt.Sprintf("%s. ERROR: %s", a.desc, err)
 			}
-			c.wg.Done()
+
+			fmt.Printf("%s -- %s -- took %s\n", s, a.desc, time.Since(s))
 		}(a)
 	}
-}
-
-func (c *coyote) printEventLog() {
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 0, 8, 0, '\t', 0)
-	fmt.Fprintln(w, "\tEvent\tTook")
-	for e := range c.eventLog {
-		fmt.Fprintf(w, "%s\t%s\t%s\t", e.at, e.action, e.took)
-	}
-	w.Flush()
+	time.Sleep(c.runtime)
 }
 
 func main() {
@@ -209,16 +256,29 @@ func main() {
 	app.Flags = []cli.Flag{}
 
 	app.Action = func(c *cli.Context) {
-		wile := coyote{}
-		err := wile.loadActionPlan([]string{})
+		// Load plan
+		content, err := ioutil.ReadFile("another-test.yml")
+		cmd.FailOnError(err, "Failed to load test plan")
+		var plan planFile
+		err = yaml.Unmarshal(content, &plan)
+		cmd.FailOnError(err, "Failed to parse test plan")
+
+		// Parse plan
+		wile := coyote{
+			runtime:      plan.Runtime.Duration,
+			mariaBin:     plan.Maria.Bin,
+			mariaErrata:  splitIntoArgs(plan.Maria.Errata),
+			rabbitBin:    plan.Rabbit.Bin,
+			rabbitErrata: splitIntoArgs(plan.Rabbit.Errata),
+		}
+		err = wile.loadActionPlan(plan.Actions)
 		cmd.FailOnError(err, "Couldn't parse action plan")
 
-		fmt.Printf("%s -- started plan\n", time.Now())
-		wile.executePlan()
-		wile.wg.Wait()
-		fmt.Printf("%s -- finished plan\n", time.Now())
+		wile.printPlan()
 
-		wile.printEventLog()
+		fmt.Printf("%s -- starting plan\n", time.Now())
+		wile.executePlan()
+		fmt.Printf("%s -- finished plan\n", time.Now())
 	}
 
 	err := app.Run(os.Args)

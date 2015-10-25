@@ -2,9 +2,9 @@
 
 ![](https://i.imgur.com/CALYCro.gif)
 
-`coyote` is a tool for running tests that simulates failures in boulder, peripheral
-services, and the underlying network. In order to fully control network flows
-between services Docker containers are used for each boulder service and each
+`coyote` is a tool for running tests that simulate or inject failures in boulder,
+peripheral services, and the underlying network. In order to fully control network
+flows between services Docker containers are used for each boulder service and each
 peripheral service.
 
 ## Peripheral services to break
