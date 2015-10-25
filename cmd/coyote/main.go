@@ -73,10 +73,13 @@ func splitIntoArgs(args string) []string {
 func execCommand(bin string, args []string) error {
 	cmd := exec.Command(bin, args...)
 	buf := new(bytes.Buffer)
-	cmd.Stdout = buf
 	cmd.Stderr = buf
 	err := cmd.Run()
-	fmt.Println(buf.String())
+	if err != nil {
+		if buf.Len() != 0 {
+			err = fmt.Errorf(buf.String())
+		}
+	}
 	return err
 }
 
@@ -95,7 +98,7 @@ func (c *coyote) parseRabbitCommand(cmd string) (func() error, string, error) {
 	case cmd == "admin":
 		return func() error {
 			return c.rabbitTool(fmt.Sprintf("%s", args))
-		}, fmt.Sprintf("Execute admin tool statement \"%s\"", args), nil
+		}, fmt.Sprintf("execute admin tool statement \"%s\"", args), nil
 	default:
 		return nil, "", fmt.Errorf("Invalid rabbit subcommand")
 	}
@@ -116,7 +119,7 @@ func (c *coyote) parseMariaCommand(cmd string) (func() error, string, error) {
 	case cmd == "exec":
 		return func() error {
 			return c.mariaTool([]string{"-e", args})
-		}, fmt.Sprintf("Execute MySQL statement \"%s\"", args), nil
+		}, fmt.Sprintf("execute MySQL statement \"%s\"", args), nil
 	default:
 		return nil, "", fmt.Errorf("Invalid maria subcommand")
 	}
@@ -157,7 +160,7 @@ func (c *coyote) loadActionPlan(actionStrings []string) error {
 				return err
 			}
 		case "command":
-			desc = fmt.Sprintf("Execute command \"%s\"", fields[2])
+			desc = fmt.Sprintf("execute command \"%s\"", fields[2])
 			do = func() error {
 				parts := strings.SplitN(fields[2], " ", 2)
 				return execCommand(parts[0], splitIntoArgs(parts[1]))
@@ -229,12 +232,11 @@ func (c *coyote) executePlan() {
 			c.actionWG.Add(1)
 			<-time.After(a.after)
 			s := time.Now()
+			fmt.Printf("%s -- %s\n", s, a.desc)
 			err := a.do()
 			if err != nil {
-				a.desc = fmt.Sprintf("%s. ERROR: %s", a.desc, err)
+				fmt.Printf("%s -- %s -- took %s -- [FAILED] %s\n", time.Now(), a.desc, time.Since(s), err)
 			}
-
-			fmt.Printf("%s -- %s -- took %s\n", s, a.desc, time.Since(s))
 			c.actionWG.Done()
 		}(a)
 	}
