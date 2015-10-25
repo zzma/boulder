@@ -40,6 +40,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 	"unicode"
@@ -48,14 +49,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/letsencrypt/boulder/cmd"
-)
-
-var (
-	rabbitBin    = "/usr/bin/rabbitadmin"
-	rabbitErrata = []string{""}
-
-	mariaBin    = "/usr/bin/mysql"
-	mariaErrata = []string{""}
 )
 
 func splitIntoArgs(args string) []string {
@@ -102,7 +95,7 @@ func (c *coyote) parseRabbitCommand(cmd string) (func() error, string, error) {
 	case cmd == "admin":
 		return func() error {
 			return c.rabbitTool(fmt.Sprintf("%s", args))
-		}, fmt.Sprintf("Executing admin tool statement \"%s\"", args), nil
+		}, fmt.Sprintf("Execute admin tool statement \"%s\"", args), nil
 	default:
 		return nil, "", fmt.Errorf("Invalid rabbit subcommand")
 	}
@@ -123,7 +116,7 @@ func (c *coyote) parseMariaCommand(cmd string) (func() error, string, error) {
 	case cmd == "exec":
 		return func() error {
 			return c.mariaTool([]string{"-e", args})
-		}, fmt.Sprintf("Executing statement \"%s\"", args), nil
+		}, fmt.Sprintf("Execute MySQL statement \"%s\"", args), nil
 	default:
 		return nil, "", fmt.Errorf("Invalid maria subcommand")
 	}
@@ -164,7 +157,7 @@ func (c *coyote) loadActionPlan(actionStrings []string) error {
 				return err
 			}
 		case "command":
-			desc = fmt.Sprintf("Executing %s", fields[2])
+			desc = fmt.Sprintf("Execute command \"%s\"", fields[2])
 			do = func() error {
 				parts := strings.SplitN(fields[2], " ", 2)
 				return execCommand(parts[0], splitIntoArgs(parts[1]))
@@ -202,8 +195,9 @@ type planFile struct {
 }
 
 type coyote struct {
-	plan    []action
-	runtime time.Duration
+	plan     []action
+	actionWG *sync.WaitGroup
+	runtime  time.Duration
 
 	rabbitBin    string
 	rabbitErrata []string
@@ -232,6 +226,7 @@ func (c *coyote) printPlan() {
 func (c *coyote) executePlan() {
 	for _, a := range c.plan {
 		go func(a action) {
+			c.actionWG.Add(1)
 			<-time.After(a.after)
 			s := time.Now()
 			err := a.do()
@@ -240,6 +235,7 @@ func (c *coyote) executePlan() {
 			}
 
 			fmt.Printf("%s -- %s -- took %s\n", s, a.desc, time.Since(s))
+			c.actionWG.Done()
 		}(a)
 	}
 	time.Sleep(c.runtime)
@@ -270,6 +266,7 @@ func main() {
 			mariaErrata:  splitIntoArgs(plan.Maria.Errata),
 			rabbitBin:    plan.Rabbit.Bin,
 			rabbitErrata: splitIntoArgs(plan.Rabbit.Errata),
+			actionWG:     new(sync.WaitGroup),
 		}
 		err = wile.loadActionPlan(plan.Actions)
 		cmd.FailOnError(err, "Couldn't parse action plan")
@@ -278,6 +275,7 @@ func main() {
 
 		fmt.Printf("%s -- starting plan\n", time.Now())
 		wile.executePlan()
+		wile.actionWG.Wait()
 		fmt.Printf("%s -- finished plan\n", time.Now())
 	}
 
