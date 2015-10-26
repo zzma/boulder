@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	mrand "math/rand"
 	"net/http"
 	"sync"
@@ -35,6 +36,23 @@ type state struct {
 	noncePool []string
 
 	throughput int64
+}
+
+func (s *state) post(endpoint string, payload []byte) (*http.Response, error) {
+	resp, err := s.client.Post(
+		endpoint,
+		"application/json",
+		bytes.NewBuffer(payload),
+	)
+	if resp != nil {
+		if newNonce := resp.Header.Get("Replay-Nonce"); newNonce != "" {
+			s.addNonce(newNonce)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (s *state) getNonce() (string, error) {
@@ -115,6 +133,8 @@ func (s *state) getRegWithCerts() (*registration, bool) {
 	}
 }
 
+var termsURL = "http://127.0.0.1:4001/terms/v1"
+
 func (s *state) newRegistration(_ *registration) {
 	// create the registration object
 	regStr := `{"resource":"new-reg","contact":[]}`
@@ -146,30 +166,116 @@ func (s *state) newRegistration(_ *registration) {
 	// into JSON
 	requestPayload, _ := json.Marshal(jws)
 
-	resp, err := s.client.Post(
-		fmt.Sprintf("%s/acme/new-reg", s.apiBase),
-		"application/json",
-		bytes.NewBuffer(requestPayload),
-	)
+	resp, err := s.post(fmt.Sprintf("%s/acme/new-reg", s.apiBase), requestPayload)
 	if err != nil {
-		// something
-		fmt.Println(err)
+		fmt.Printf("[FAILED] new-reg: %s\n", err)
 		return
 	}
 	if resp.StatusCode != 201 {
-		// something
-		fmt.Printf("%#v\n", resp)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			// just fail
+			return
+		}
+		fmt.Printf("[FAILED] new-reg: %s\n", string(body))
 		return
 	}
-	// add nonce to nonce pool!
-	if newNonce := resp.Header.Get("Replay-Nonce"); newNonce != "" {
-		s.addNonce(newNonce)
+
+	// agree to terms
+	regStr = fmt.Sprintf(`{"resource":"reg","agreement":"%s"}`, termsURL)
+
+	// build the JWS object
+	payload = []byte(regStr)
+	// send a POST request
+	nonce, err = s.getNonce()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	jws, err = signer.Sign(payload, nonce)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// into JSON
+	requestPayload, _ = json.Marshal(jws)
+
+	resp, err = s.post(resp.Header.Get("Location"), requestPayload)
+	if err != nil {
+		fmt.Printf("[FAILED] reg: %s\n", err)
+		return
+	}
+	if resp.StatusCode != 202 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			// just fail
+			return
+		}
+		fmt.Printf("[FAILED] reg: %s\n", string(body))
+		return
 	}
 
 	s.addReg(&registration{key: signKey, iMu: new(sync.RWMutex)})
 }
 
+var dnsLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 func (s *state) newAuthorization(reg *registration) {
+	// generate a random domain name (should come up with some fun names... THE NEXT GOOGLE PERHAPS?)
+	var buff bytes.Buffer
+	mrand.Seed(time.Now().UnixNano())
+	randLen := mrand.Intn(61-3) + 1
+	for i := 0; i < randLen; i++ {
+		buff.WriteByte(dnsLetters[mrand.Intn(len(dnsLetters))])
+	}
+	randomDomain := fmt.Sprintf("%s.com", buff.String())
+
+	// create the registration object
+	initAuth := fmt.Sprintf(`{"resource":"new-authz","identifier":{"type":"dns","value":"%s"}}`, randomDomain)
+
+	// build the JWS object
+	payload := []byte(initAuth)
+	signer, err := jose.NewSigner(jose.RS256, reg.key)
+	// send a POST request
+	nonce, err := s.getNonce()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	jws, err := signer.Sign(payload, nonce)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	// into JSON
+	requestPayload, _ := json.Marshal(jws)
+	resp, err := s.post(fmt.Sprintf("%s/acme/new-authz", s.apiBase), requestPayload)
+	if err != nil {
+		fmt.Printf("[FAILED] new-authz: %s\n", err)
+		return
+	}
+	if resp.StatusCode != 201 {
+		// something
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			// just fail
+			return
+		}
+		fmt.Printf("[FAILED] new-authz: %s\n", string(body))
+		return
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		// just fail
+		return
+	}
+
+	var authz core.Authorization
+	err = json.Unmarshal(body, authz)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 }
 
@@ -215,11 +321,16 @@ func main() {
 		nMu:        new(sync.Mutex),
 		client:     new(http.Client),
 		apiBase:    "http://localhost:4000",
-		throughput: 10,
+		throughput: 5,
 		maxRegs:    250,
 	}
 	for {
 		go s.sendCall()
 		time.Sleep(time.Duration(time.Second.Nanoseconds() / atomic.LoadInt64(&s.throughput)))
 	}
+	// s.newRegistration(nil)
+	// reg, found := s.getReg()
+	// if found {
+	// 	s.newAuthorization(reg)
+	// }
 }
