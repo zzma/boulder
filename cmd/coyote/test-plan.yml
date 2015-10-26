@@ -1,32 +1,14 @@
-# plan format:
-# - {after} {thing to mess with} {how to mess with it} {arguments}
+rabbit:
+  bin: /usr/bin/rabbitadmin
+  errata:
 
-run-images:
-  # boulder services
-  - boulder-wfe
-  - boulder-ra
-  - boulder-sa
-  - boulder-va
-  - boulder-publisher
-  - ocsp-updater
-  - ocsp-responder
+maria:
+  bin: /usr/bin/mysql
+  errata: -uboulder
 
-  # peripheral services
-  - rabbitmq
-  - mariadb
-  - test-dns
-  - test-ct
+runtime: 6m
 
-plan:
-  # mess with maria
-  - 10m maria exec LOCK TABLES registrations
-  - 15m maria exec UNLOCK TABLES
-
-  # mess with the network
-  - 20m network partition boulder-ra<->boulder-sa
-  - 25m network heal-partition boulder-ra<->boulder-sa
-  - 25m network rate test-ct 100kbps
-
-expected:
-  alive:
-    - all
+actions:
+  - 0m command ./ca-bench -issuance=10 -benchTime=6m -chartDataPath=coyote-test.json
+  - 2m rabbit admin delete queue name=CA.server
+  - 4m rabbit admin delete queue name=CA.server

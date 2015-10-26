@@ -14,89 +14,83 @@ peripheral service.
 * DNS resolver (Unbound/dnsmasq or something?)
 * CT log server
 
-## Test description format
+## Plan file format
 
-`coyote` takes one argument, the filename of a YAML test plan which describes what should be done and
+`coyote` takes one argument, the filename of a YAML plan file which describes what should be done and
 when. The description file contains a number of
 
 ```
-initialLoad: 10 #/s
+rabbit:
+  bin: /usr/bin/rabbitadmin
+  errata:
 
-plan:
-	- 5m docker halt-process boulder-sa
-	- 10m docker resume-process boulder-sa
-	- 15m end
+maria:
+  bin: /usr/bin/mysql
+  errata: -uroot
 
-expected:
-	alive: all
+runtime: 6m
+
+actions:
+  - 0m command ./ca-bench -issuance=10 -benchTime=6m -chartDataPath=coyote-test.json
+  - 2m rabbit admin delete queue name=CA.server
+  - 4m rabbit admin delete queue name=CA.server
+
 ```
 
-The `plan` section of the file should contain a list of events in the following format
+The `actions` section of the file should contain a list of events in the following format
 
 ```
 {after} {command} {subcommand} {arguments}
 
-# e.g. after ten minutes execute a SQL statement that kills all open transactions
-10m maria exec call eval('SELECT sql_kill_query FROM innodb_transactions')
+# e.g. after ten minutes execute a SQL statement that kills all open connections
+10m maria exec select concat('KILL ',id,';') from information_schema.processlist where id != CONNECTION_ID() into outfile '/tmp/evil'; source /tmp/evil;
 ```
 
 ### Commands
 
 #### General
 
-* `load-generator`
-	This command is used to alter load on the system
-
-	* `set {throughput}`
-		Sets the throughput of the load generator, e.g. `set 15`
-	* `pause {duration}`
-		Pauses the load generator, e.g. `pause 1m`
-	* `start`
-		Starts the load generator
-	* `stop`
-		Stops the load generator
-
-* `end`
-	This command doesn't do anything itself but can be used to extend the runtime of a plan beyond
-	executing the last meaningful command.
+* `command {bin} {args...}`
+		This command is used to execute other commands like `ca-bench`, `load-generator`,
+		or `softhsm`
 
 #### Docker
 
 * `docker`
-	This command is used to interact with the docker containers holding the services
+		This command is used to interact with the docker containers holding the services
 
 	* `run`
-		Runs the container
+			Runs the container
 	* `stop`
-		Stops the container
+			Stops the container
 	* `halt-process`
-		Sends a `SIGTSTP` to the main command running in the container
+			Sends a `SIGTSTP` to the main command running in the container
 	* `resume-process`
-		Sends a `SIGCONT` to the main command running in the container
+			Sends a `SIGCONT` to the main command running in the container
 
 #### Network
 
 * `network`
-	This command is used to cause failures and interruptions in the network connecting the various
-	docker containers
+		This command is used to cause failures and interruptions in the network connecting the various
+		docker containers
 
-	* `partition {container} ?{direction} ?{container}`
-		Partitions a container from the rest of the network, or two containers in a specific direction
-	* `heal-partition`
-	* `lossy {percent loss}`
-	* `lag {lag duration}`
-	* `rate-limit {throughput}`
+		* `partition {container} ?{direction} ?{container}`
+				Partitions a container from the rest of the network, or two containers in a specific direction
+		* `heal-partition`
+		* `lossy {percent loss}`
+		* `lag {lag duration}`
+		* `rate-limit {throughput}`
 
 #### Peripheral services
 
 * `maria`
-	* `start`
-	* `stop`
-	* `restart`
-	* `exec {statement}`
+		* `start`
+		* `stop`
+		* `restart`
+		* `exec {statement}`
 
 * `rabbit`
-	* `start`
-    * `stop`
-    * `restart`
-    * `admin {statement}`
+		* `start`
+		    * `stop`
+		    * `restart`
+		    * `admin {statement}`
