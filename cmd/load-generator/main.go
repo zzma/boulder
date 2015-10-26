@@ -9,6 +9,7 @@ import (
 	mrand "math/rand"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
@@ -32,6 +33,8 @@ type state struct {
 
 	nMu       *sync.Mutex
 	noncePool []string
+
+	throughput int64
 }
 
 func (s *state) getNonce() (string, error) {
@@ -48,7 +51,7 @@ func (s *state) getNonce() (string, error) {
 		return "", fmt.Errorf("Nonce header not supplied!")
 	}
 	nonce := s.noncePool[0]
-	s.noncePool = s.noncePool[0:]
+	s.noncePool = s.noncePool[1:]
 	return nonce, nil
 }
 
@@ -163,10 +166,7 @@ func (s *state) newRegistration(_ *registration) {
 		s.addNonce(newNonce)
 	}
 
-	reg := registration{
-		key: signKey,
-	}
-	s.addReg(&reg)
+	s.addReg(&registration{key: signKey, iMu: new(sync.RWMutex)})
 }
 
 func (s *state) newAuthorization(reg *registration) {
@@ -202,18 +202,24 @@ func (s *state) sendCall() {
 		reg.iMu.RUnlock()
 	}
 
-	actions[mrand.Intn(len(actions)-1)](reg)
+	if len(actions) > 0 {
+		actions[mrand.Intn(len(actions))](reg)
+	} else {
+		fmt.Println("wat")
+	}
 }
 
 func main() {
 	s := state{
-		rMu:     new(sync.RWMutex),
-		nMu:     new(sync.Mutex),
-		client:  new(http.Client),
-		apiBase: "http://localhost:4000",
+		rMu:        new(sync.RWMutex),
+		nMu:        new(sync.Mutex),
+		client:     new(http.Client),
+		apiBase:    "http://localhost:4000",
+		throughput: 10,
+		maxRegs:    250,
 	}
 	for {
-		go s.newRegistration(nil)
-		time.Sleep(250 * time.Millisecond)
+		go s.sendCall()
+		time.Sleep(time.Duration(time.Second.Nanoseconds() / atomic.LoadInt64(&s.throughput)))
 	}
 }
