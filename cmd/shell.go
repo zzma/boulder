@@ -58,15 +58,19 @@ type Config struct {
 
 	// General
 	AMQP struct {
-		Server    string
-		Insecure  bool
-		RA        Queue
-		VA        Queue
-		SA        Queue
-		CA        Queue
-		OCSP      Queue
-		Publisher Queue
-		TLS       *TLSConfig
+		Server            string
+		Insecure          bool
+		RA                Queue
+		VA                Queue
+		SA                Queue
+		CA                Queue
+		OCSP              Queue
+		Publisher         Queue
+		TLS               *TLSConfig
+		ReconnectTimeouts struct {
+			Base ConfigDuration
+			Max  ConfigDuration
+		}
 	}
 
 	WFE struct {
@@ -301,6 +305,16 @@ type OCSPUpdaterConfig struct {
 
 	OCSPMinTimeToExpiry ConfigDuration
 	OldestIssuedSCT     ConfigDuration
+
+	AkamaiBaseURL           string
+	AkamaiClientToken       string
+	AkamaiClientSecret      string
+	AkamaiAccessToken       string
+	AkamaiPurgeRetries      int
+	AkamaiPurgeRetryBackoff ConfigDuration
+
+	SignFailureBackoffFactor float64
+	SignFailureBackoffMax    ConfigDuration
 
 	// DebugAddr is the address to run the /debug handlers on.
 	DebugAddr string

@@ -6,7 +6,7 @@
   },
 
   "amqp": {
-    "server": "amqp://guest:guest@localhost:5672",
+    "server": "amqp://guest:guest@localhost:5673",
     "insecure": true,
     "-uncomment_for_AMQPS-tls": {
       "cacertfile": "/etc/boulder/rabbitmq-cacert.pem",
@@ -172,7 +172,9 @@
     "missingSCTBatchSize": 5000,
     "revokedCertificateBatchSize": 1000,
     "ocspMinTimeToExpiry": "72h",
-    "sctOldestIssued": "72h",
+    "oldestIssuedSCT": "72h",
+    "signFailureBackoffFactor": 1.2,
+    "signFailureBackoffMax": "30m",
     "debugAddr": "localhost:8006"
   },
 
