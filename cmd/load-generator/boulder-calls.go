@@ -83,8 +83,6 @@ func (s *state) newRegistration(_ *registration) {
 	s.addReg(&registration{key: signKey, signer: signer, iMu: new(sync.RWMutex)})
 }
 
-var dnsLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
 func (s *state) solveHTTPOne(reg *registration, chall core.Challenge, signer jose.Signer, authURI string) error {
 	keyAuthz, err := core.NewKeyAuthorization(chall.Token, &jose.JsonWebKey{Key: &reg.key.PublicKey})
 	if err != nil {
@@ -130,7 +128,7 @@ func (s *state) solveHTTPOne(reg *registration, chall core.Challenge, signer jos
 		if newAuthz.Status == "valid" {
 			break
 		}
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(3 * time.Second) // XXX: Mimics client behaviour
 	}
 	reg.iMu.Lock()
 	reg.auths = append(reg.auths, newAuthz)
@@ -138,8 +136,10 @@ func (s *state) solveHTTPOne(reg *registration, chall core.Challenge, signer jos
 	return nil
 }
 
+var dnsLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
 func (s *state) newAuthorization(reg *registration) {
-	// generate a random domain name (should come up with some fun names... THE NEXT GOOGLE PERHAPS?)
+	// generate a random domain name
 	var buff bytes.Buffer
 	mrand.Seed(time.Now().UnixNano())
 	randLen := mrand.Intn(61-3) + 1
