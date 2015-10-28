@@ -234,24 +234,69 @@ func (s *state) newCertificate(reg *registration) {
 		fmt.Printf("[FAILED] new-cert: %s\n", err)
 		return
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return
-	}
 	if resp.StatusCode != 201 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Printf("WELP, bad body: %s\n", err)
+			return
+		}
 		fmt.Printf("[FAILED] new-cert: %s\n", string(body))
 		return
 	}
 
 	if certLoc := resp.Header.Get("Location"); certLoc != "" {
 		reg.iMu.Lock()
-		reg.certs = append(reg.certs)
+		reg.certs = append(reg.certs, certLoc)
 		reg.iMu.Unlock()
+	} else {
+		fmt.Println(resp.Header)
 	}
 
 	return
 }
 
 func (s *state) revokeCertificate(reg *registration) {
+	// randomly select a cert to revoke
+	reg.iMu.Lock()
+	defer reg.iMu.Unlock()
+	if len(reg.certs) == 0 {
+		fmt.Println("WELP, no certs")
+		return
+	}
 
+	index := mrand.Intn(len(reg.certs))
+	resp, err := s.client.Get(reg.certs[index])
+	if err != nil {
+		fmt.Printf("[FAILED] cert: %s\n", err)
+		return
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("WELP, bad body: %s\n", err)
+		return
+	}
+
+	request := fmt.Sprintf(`{"resource":"revoke-cert","certificate":"%s"}`, core.B64enc(body))
+	requestPayload, err := s.signWithNonce([]byte(request), reg.signer)
+	if err != nil {
+		fmt.Printf("[FAILED] revoke-cert: %s\n", err)
+		return
+	}
+
+	resp, err = s.post(fmt.Sprintf("%s/acme/revoke-cert", s.apiBase), requestPayload)
+	if err != nil {
+		fmt.Printf("[FAILED] revoke-cert: %s\n", err)
+		return
+	}
+	if resp.StatusCode != 200 {
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Printf("WELP, bad body: %s\n", err)
+			return
+		}
+		fmt.Printf("[FAILED] revoke-cert: %s\n", string(body))
+		return
+	}
+
+	reg.certs = append(reg.certs[:index], reg.certs[index+1:]...)
 }

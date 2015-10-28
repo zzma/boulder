@@ -46,18 +46,7 @@ type state struct {
 	certKey *rsa.PrivateKey
 }
 
-func (s *state) signWithNonce(payload []byte, signer jose.Signer) ([]byte, error) {
-	nonce, err := s.getNonce()
-	if err != nil {
-		return nil, err
-	}
-	jws, err := signer.Sign(payload, nonce)
-	if err != nil {
-		return nil, err
-	}
-	// into JSON
-	return json.Marshal(jws)
-}
+// HTTP utils
 
 func (s *state) post(endpoint string, payload []byte) (*http.Response, error) {
 	resp, err := s.client.Post(
@@ -74,6 +63,21 @@ func (s *state) post(endpoint string, payload []byte) (*http.Response, error) {
 		return nil, err
 	}
 	return resp, nil
+}
+
+// Nonce utils, these methods are used to generate/store/retrieve the nonces
+// required for the required form of JWS
+
+func (s *state) signWithNonce(payload []byte, signer jose.Signer) ([]byte, error) {
+	nonce, err := s.getNonce()
+	if err != nil {
+		return nil, err
+	}
+	jws, err := signer.Sign(payload, nonce)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(jws)
 }
 
 func (s *state) getNonce() (string, error) {
@@ -100,6 +104,8 @@ func (s *state) addNonce(nonce string) {
 	s.noncePool = append(s.noncePool, nonce)
 }
 
+// Reg object utils, used to add and randomly retrieve registration objects
+
 func (s *state) addReg(reg *registration) {
 	s.rMu.Lock()
 	defer s.rMu.Unlock()
@@ -120,6 +126,8 @@ func (s *state) getReg() (*registration, bool) {
 	return s.getRandReg()
 }
 
+// Call sender, it sends the calls!
+
 func (s *state) sendCall() {
 	actions := []func(*registration){}
 	s.rMu.RLock()
@@ -135,7 +143,7 @@ func (s *state) sendCall() {
 		if len(reg.auths) > 0 {
 			actions = append(actions, s.newCertificate)
 		}
-		if len(reg.certs) > 0 {
+		if len(reg.certs) > 2 { // XXX: makes life more interesting
 			actions = append(actions, s.revokeCertificate)
 		}
 		reg.iMu.RUnlock()
@@ -208,6 +216,7 @@ func main() {
 		// if found {
 		// 	s.newAuthorization(reg)
 		// 	s.newCertificate(reg)
+		// 	s.revokeCertificate(reg)
 		// 	forever := make(chan bool)
 		// 	<-forever
 		// }

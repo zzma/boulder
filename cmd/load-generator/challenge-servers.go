@@ -33,7 +33,7 @@ func (s *state) httpOneServer() error {
 		if strings.HasPrefix(requestPath, "/.well-known/acme-challenge/") {
 			token := requestPath[28:]
 			if auth, found := s.getHTTPOneChallenge(token); found {
-				fmt.Printf("http-0 challenge request for %s\n", token)
+				// fmt.Printf("http-0 challenge request for %s\n", token)
 				fmt.Fprintf(w, "%s", auth)
 				s.deleteHTTPOneChallenge(token)
 			}
