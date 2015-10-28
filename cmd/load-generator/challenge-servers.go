@@ -40,5 +40,5 @@ func (s *state) httpOneServer() error {
 		}
 	})
 
-	return http.ListenAndServe(":5002", nil)
+	return http.ListenAndServe(fmt.Sprintf(":%d", s.httpOnePort), nil)
 }

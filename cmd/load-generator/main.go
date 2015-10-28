@@ -42,6 +42,7 @@ type state struct {
 
 	hoMu              *sync.RWMutex
 	httpOneChallenges map[string]string
+	httpOnePort       int
 
 	certKey *rsa.PrivateKey
 }
@@ -185,6 +186,11 @@ func main() {
 			Usage: "Bit size of the key to sign certificates with",
 			Value: 2048,
 		},
+		cli.IntFlag{
+			Name:  "httpOnePort",
+			Usage: "Port to run the http-0 challenge server on",
+			Value: 5002,
+		},
 	}...)
 
 	app.Action = func(c *cli.Context) {
@@ -195,6 +201,7 @@ func main() {
 			nMu:               new(sync.Mutex),
 			hoMu:              new(sync.RWMutex),
 			httpOneChallenges: make(map[string]string),
+			httpOnePort:       c.GlobalInt("httpOnePort"),
 			client:            new(http.Client),
 			apiBase:           c.GlobalString("apiBase"),
 			throughput:        int64(c.GlobalInt("rate")),
