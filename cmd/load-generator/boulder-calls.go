@@ -80,7 +80,7 @@ func (s *state) newRegistration(_ *registration) {
 		return
 	}
 
-	s.addReg(&registration{key: signKey, iMu: new(sync.RWMutex)})
+	s.addReg(&registration{key: signKey, signer: signer, iMu: new(sync.RWMutex)})
 }
 
 var dnsLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -152,12 +152,7 @@ func (s *state) newAuthorization(reg *registration) {
 	initAuth := fmt.Sprintf(`{"resource":"new-authz","identifier":{"type":"dns","value":"%s"}}`, randomDomain)
 
 	// build the JWS object
-	signer, err := jose.NewSigner(jose.RS256, reg.key)
-	if err != nil {
-		fmt.Printf("[FAILED] new-authz: %s\n", err)
-		return
-	}
-	requestPayload, err := s.signWithNonce([]byte(initAuth), signer)
+	requestPayload, err := s.signWithNonce([]byte(initAuth), reg.signer)
 	if err != nil {
 		fmt.Printf("[FAILED] new-authz: %s\n", err)
 		return
@@ -195,7 +190,7 @@ func (s *state) newAuthorization(reg *registration) {
 	for _, c := range authz.Challenges {
 		switch c.Type {
 		case "http-01":
-			err = s.solveHTTPOne(reg, c, signer, location)
+			err = s.solveHTTPOne(reg, c, reg.signer, location)
 			if err != nil {
 				fmt.Printf("Failed to solve http-0 challenge: %s\n", err)
 				return
@@ -228,12 +223,7 @@ func (s *state) newCertificate(reg *registration) {
 	)
 
 	// build the JWS object
-	signer, err := jose.NewSigner(jose.RS256, reg.key)
-	if err != nil {
-		fmt.Printf("[FAILED] new-cert: %s\n", err)
-		return
-	}
-	requestPayload, err := s.signWithNonce([]byte(request), signer)
+	requestPayload, err := s.signWithNonce([]byte(request), reg.signer)
 	if err != nil {
 		fmt.Printf("[FAILED] new-cert: %s\n", err)
 		return
@@ -253,9 +243,12 @@ func (s *state) newCertificate(reg *registration) {
 		return
 	}
 
-	reg.iMu.Lock()
-	reg.certs = append(reg.certs, body)
-	reg.iMu.Unlock()
+	if certLoc := resp.Header.Get("Location"); certLoc != "" {
+		reg.iMu.Lock()
+		reg.certs = append(reg.certs)
+		reg.iMu.Unlock()
+	}
+
 	return
 }
 

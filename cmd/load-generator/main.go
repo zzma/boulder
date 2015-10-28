@@ -21,10 +21,11 @@ import (
 )
 
 type registration struct {
-	key   *rsa.PrivateKey
-	iMu   *sync.RWMutex
-	auths []core.Authorization
-	certs [][]byte
+	key    *rsa.PrivateKey
+	signer jose.Signer
+	iMu    *sync.RWMutex
+	auths  []core.Authorization
+	certs  []string
 }
 
 type state struct {
