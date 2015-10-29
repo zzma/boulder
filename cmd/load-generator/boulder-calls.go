@@ -142,11 +142,11 @@ func (s *state) newAuthorization(reg *registration) {
 	// generate a random domain name
 	var buff bytes.Buffer
 	mrand.Seed(time.Now().UnixNano())
-	randLen := mrand.Intn(61-3) + 1
+	randLen := mrand.Intn(60 - len(s.domainBase))
 	for i := 0; i < randLen; i++ {
 		buff.WriteByte(dnsLetters[mrand.Intn(len(dnsLetters))])
 	}
-	randomDomain := fmt.Sprintf("%s.com", buff.String())
+	randomDomain := fmt.Sprintf("%s.%s", buff.String(), s.domainBase)
 
 	// create the registration object
 	initAuth := fmt.Sprintf(`{"resource":"new-authz","identifier":{"type":"dns","value":"%s"}}`, randomDomain)

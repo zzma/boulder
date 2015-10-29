@@ -44,7 +44,8 @@ type state struct {
 	httpOneChallenges map[string]string
 	httpOnePort       int
 
-	certKey *rsa.PrivateKey
+	certKey    *rsa.PrivateKey
+	domainBase string
 }
 
 // HTTP utils
@@ -173,7 +174,7 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "rate",
-			Usage: "The rate (per second) at which to send calls",
+			Usage: "The base rate (per second) at which to perform API actions",
 			Value: 1,
 		},
 		cli.IntFlag{
@@ -191,6 +192,11 @@ func main() {
 			Usage: "Port to run the http-0 challenge server on",
 			Value: 5002,
 		},
+		cli.StringFlag{
+			Name:  "domainBase",
+			Usage: "Base label for randomly generated domains",
+			Value: "com",
+		},
 	}...)
 
 	app.Action = func(c *cli.Context) {
@@ -207,6 +213,7 @@ func main() {
 			throughput:        int64(c.GlobalInt("rate")),
 			maxRegs:           c.GlobalInt("maxRegs"),
 			certKey:           certKey,
+			domainBase:        c.GlobalString("domainBase"),
 		}
 
 		// Run http-0 challenge server
