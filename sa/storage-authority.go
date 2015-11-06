@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
 	gorp "github.com/letsencrypt/boulder/Godeps/_workspace/src/gopkg.in/gorp.v1"
@@ -30,6 +31,7 @@ const getChallengesQuery = "SELECT * FROM challenges WHERE authorizationID = :au
 // SQLStorageAuthority defines a Storage Authority
 type SQLStorageAuthority struct {
 	dbMap *gorp.DbMap
+	stats statsd.Statter
 	clk   clock.Clock
 	log   *blog.AuditLogger
 }
@@ -53,13 +55,14 @@ type authzModel struct {
 
 // NewSQLStorageAuthority provides persistence using a SQL backend for
 // Boulder. It will modify the given gorp.DbMap by adding relevent tables.
-func NewSQLStorageAuthority(dbMap *gorp.DbMap, clk clock.Clock) (*SQLStorageAuthority, error) {
+func NewSQLStorageAuthority(dbMap *gorp.DbMap, clk clock.Clock, stats statsd.Statter) (*SQLStorageAuthority, error) {
 	logger := blog.GetAuditLogger()
 
 	logger.Notice("Storage Authority Starting")
 
 	ssa := &SQLStorageAuthority{
 		dbMap: dbMap,
+		stats: stats,
 		clk:   clk,
 		log:   logger,
 	}
@@ -123,7 +126,13 @@ func updateChallenges(authID string, challenges []core.Challenge, tx *gorp.Trans
 
 // GetRegistration obtains a Registration by ID
 func (ssa *SQLStorageAuthority) GetRegistration(id int64) (core.Registration, error) {
+	methStart := ssa.clk.Now()
+	defer ssa.stats.TimingDuration("Server.SA.GetRegistration.Latency", ssa.clk.Now().Sub(methStart), 1.0)
+
+	getStart := ssa.clk.Now()
 	regObj, err := ssa.dbMap.Get(regModel{}, id)
+	ssa.stats.TimingDuration("Server.SA.DB.GetRegistration.Latency", ssa.clk.Now().Sub(getStart), 1.0)
+
 	if err != nil {
 		return core.Registration{}, err
 	}
