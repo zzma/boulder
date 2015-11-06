@@ -127,7 +127,9 @@ func updateChallenges(authID string, challenges []core.Challenge, tx *gorp.Trans
 // GetRegistration obtains a Registration by ID
 func (ssa *SQLStorageAuthority) GetRegistration(id int64) (core.Registration, error) {
 	methStart := ssa.clk.Now()
-	defer ssa.stats.TimingDuration("Server.SA.GetRegistration.Total.Latency", ssa.clk.Now().Sub(methStart), 1.0)
+	defer func(t time.Time) {
+		ssa.stats.TimingDuration("Server.SA.GetRegistration.Total.Latency", ssa.clk.Now().Sub(t), 1.0)
+	}(methStart)
 
 	getStart := ssa.clk.Now()
 	regObj, err := ssa.dbMap.Get(regModel{}, id)
