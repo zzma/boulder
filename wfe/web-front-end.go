@@ -93,7 +93,7 @@ type WebFrontEndImpl struct {
 
 func statusCodeFromError(err interface{}) int {
 	// Populate these as needed.  We probably should trim the error list in util.go
-	switch err.(type) {
+	switch err := err.(type) {
 	case core.MalformedRequestError:
 		return http.StatusBadRequest
 	case core.NotSupportedError:
@@ -112,6 +112,17 @@ func statusCodeFromError(err interface{}) int {
 		return http.StatusInternalServerError
 	case core.RateLimitedError:
 		return StatusRateLimited
+	case *core.ProblemDetails:
+		return statusCodeFromProblemDetails(err)
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func statusCodeFromProblemDetails(err *core.ProblemDetails) int {
+	switch err.Type {
+	case core.ConnectionProblem:
+		return http.StatusForbidden
 	default:
 		return http.StatusInternalServerError
 	}
@@ -481,28 +492,30 @@ func (wfe *WebFrontEndImpl) verifyPOST(logEvent *requestEvent, request *http.Req
 
 // Notify the client of an error condition and log it for audit purposes.
 func (wfe *WebFrontEndImpl) sendError(response http.ResponseWriter, logEvent *requestEvent, msg string, detail interface{}, code int) {
-	problem := core.ProblemDetails{Detail: msg}
-	switch code {
-	case http.StatusPreconditionFailed:
-		fallthrough
-	case http.StatusForbidden:
-		problem.Type = core.UnauthorizedProblem
-	case http.StatusConflict:
-		fallthrough
-	case http.StatusMethodNotAllowed:
-		fallthrough
-	case http.StatusNotFound:
-		fallthrough
-	case http.StatusBadRequest:
-		fallthrough
-	case http.StatusLengthRequired:
-		problem.Type = core.MalformedProblem
-	case StatusRateLimited:
-		problem.Type = core.RateLimitedProblem
-	default: // Either http.StatusInternalServerError or an unexpected code
-		problem.Type = core.ServerInternalProblem
+	problem, ok := detail.(*core.ProblemDetails)
+	if !ok {
+		problem.Detail = msg
+		switch code {
+		case http.StatusPreconditionFailed:
+			fallthrough
+		case http.StatusForbidden:
+			problem.Type = core.UnauthorizedProblem
+		case http.StatusConflict:
+			fallthrough
+		case http.StatusMethodNotAllowed:
+			fallthrough
+		case http.StatusNotFound:
+			fallthrough
+		case http.StatusBadRequest:
+			fallthrough
+		case http.StatusLengthRequired:
+			problem.Type = core.MalformedProblem
+		case StatusRateLimited:
+			problem.Type = core.RateLimitedProblem
+		default: // Either http.StatusInternalServerError or an unexpected code
+			problem.Type = core.ServerInternalProblem
+		}
 	}
-
 	// Record details to the log event
 	logEvent.AddError(msg)
 
@@ -645,7 +658,7 @@ func (wfe *WebFrontEndImpl) NewAuthorization(logEvent *requestEvent, response ht
 	authz, err := wfe.RA.NewAuthorization(init, currReg.ID)
 	if err != nil {
 		logEvent.AddError("unable to create new authz: %s", err)
-		wfe.sendError(response, logEvent, "Error creating new authz", err, statusCodeFromError(err))
+		wfe.sendError(response, logEvent, "", err, statusCodeFromError(err))
 		return
 	}
 	logEvent.Extra["AuthzID"] = authz.ID

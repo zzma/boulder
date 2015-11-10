@@ -237,6 +237,15 @@ func wrapError(err error) (rpcError rpcError) {
 			rpcError.Type = "RateLimitedError"
 		case core.ServiceUnavailableError:
 			rpcError.Type = "ServiceUnavailableError"
+		case *core.ProblemDetails:
+			marshaledValue, marshalErr := json.Marshal(err)
+			if marshalErr != nil {
+				rpcError.Type = "InternalServerError"
+				rpcError.Value = "Error marshaling ProblemDetails"
+			} else {
+				rpcError.Type = "ProblemDetails"
+				rpcError.Value = string(marshaledValue)
+			}
 		}
 	}
 	return
@@ -270,6 +279,14 @@ func unwrapError(rpcError rpcError) (err error) {
 			err = core.RateLimitedError(rpcError.Value)
 		case "ServiceUnavailableError":
 			err = core.ServiceUnavailableError(rpcError.Value)
+		case "ProblemDetails":
+			var problemDetails core.ProblemDetails
+			unmarshalErr := json.Unmarshal([]byte(rpcError.Value), &problemDetails)
+			if unmarshalErr != nil {
+				err = core.InternalServerError("Error unmarshalling ProblemDetails")
+			} else {
+				err = &problemDetails
+			}
 		default:
 			err = errors.New(rpcError.Value)
 		}
