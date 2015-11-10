@@ -11,7 +11,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -31,14 +30,9 @@ import (
 	blog "github.com/letsencrypt/boulder/log"
 )
 
-const maxCNAME = 16 // Prevents infinite loops. Same limit as BIND.
 const maxRedirect = 10
 
 var validationTimeout = time.Second * 5
-
-// ErrTooManyCNAME is returned by CheckCAARecords if it has to follow too many
-// consecutive CNAME lookups.
-var ErrTooManyCNAME = errors.New("too many CNAME/DNAME lookups")
 
 // ValidationAuthorityImpl represents a VA
 type ValidationAuthorityImpl struct {
@@ -759,7 +753,14 @@ func (va *ValidationAuthorityImpl) getCAASet(hostname string) (*CAASet, error) {
 		}
 		CAAs, caaRtt, err := va.DNSResolver.LookupCAA(name)
 		if err != nil {
-			return nil, err
+			problem := "error"
+			if opErr, ok := err.(*net.OpError); ok && opErr.Timeout() {
+				problem = "timeout"
+			}
+			return nil, &core.ProblemDetails{
+				Type:   core.ConnectionProblem,
+				Detail: fmt.Sprintf("DNS %s looking up CAA for %s", problem, hostname),
+			}
 		}
 		va.stats.TimingDuration("VA.DNS.RTT.CAA", caaRtt, 1.0)
 		va.stats.Inc("VA.DNS.Rate", 1, 1.0)
