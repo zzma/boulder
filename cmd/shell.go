@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	_ "expvar" // For DebugServer, below.
 	"fmt"
 	"io/ioutil"
 	"log"
