@@ -147,7 +147,7 @@
   },
 
   "sa": {
-    "dbConnect": "mysql+tcp://sa@localhost:3306/boulder_sa_integration",
+    "dbConnect": "mysql+tcp://sa@localhost:3306/boulder_sa_integration?timeout=800ms",
     "maxConcurrentRPCServerRequests": 16,
     "debugAddr": "localhost:8003",
     "amqp": {
