@@ -1,74 +1,92 @@
 package va
 
 import (
+	"fmt"
 	"net"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/letsencrypt/boulder/bdns"
 )
 
-type TypePreference struct
+type TypePreference int
 
 var (
-	V4 TypePreference
-	V6 TypePreference
+	V4 = TypePreference(0)
+	V6 = TypePreference(1)
 )
+
+func dialAddr(addr string, port int, timeout time.Duration, cancel chan struct{}, errors chan error, conns chan *net.Conn) {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), timeout)
+	if err != nil {
+		errors <- err
+		return
+	}
+	select {
+	case conns <- &conn:
+		// won!
+	case <-cancel:
+		conn.Close()
+	}
+}
+
+func partition(pref TypePreference, addr net.IP, primary *net.IP, secondary *net.IP) {
+	if pref == V6 {
+		if len(addr) == net.IPv6len {
+			primary = &addr
+		} else {
+			secondary = &addr
+		}
+	} else {
+		if len(addr) == net.IPv4len {
+			primary = &addr
+		} else {
+			secondary = &addr
+		}
+	}
+}
 
 func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, pref TypePreference, timeout time.Duration) (*net.Conn, []net.IP, error) {
 	// lookup addresses
 	wg := new(sync.WaitGroup)
-	addrs := make(chan net.IP, 2)
+	allAddrs := make(chan net.IP, 2)
 	errors := make(chan error, 2)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		v4Addrs, err := resolver.LookupA(hostname)
-		if err != nil {
-			errors <- err
-			return
-		}
-		addrs <- v4Addrs
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		v6Addrs, err := resolver.LookupAAAA(hostname)
-		if err != nil {
-			errors <- err
-			return
-		}
-		addrs <- v6Addrs
-	}()
+	lookups := []func(string) ([]net.IP, error){
+		resolver.LookupA,
+		resolver.LookupAAAA,
+	}
+	for _, lookuper := range lookups {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			addrs, err := lookuper(hostname)
+			if err != nil {
+				errors <- err
+				return
+			}
+			allAddrs <- addrs
+		}()
+	}
 	wg.Wait()
-	close(addrs)
+	close(allAddrs)
 	close(errors)
 	if len(errors) > 0 {
 		return nil, nil, <-errors
 	}
-	if len(addrs) == 0 {
+	if len(allAddrs) == 0 {
 		return nil, nil, fmt.Errorf("No IPv4/6 addresses found")
 	}
 
 	// choose primary/secondary addresses
-	resvoledAddrs := []net.IP{}
+	resolvedAddrs := []net.IP{}
 	var primaryAddr *net.IP
 	var secondaryAddr *net.IP
-	for _, addr := range addrs {
+	for addr := range allAddrs {
 		resolvedAddrs = append(resolvedAddrs, addr)
 	}
-	for _, addr := range  resolvedAddrs {
-		if pref == V6 {
-			if len(addr) == net.IPv6len {
-				primaryAddr = addr
-			} else {
-				secondaryAddr = addr
-			}
-		} else {
-			if len(addr) == net.IPv4len {
-				primaryAddr = addr
-			} else {
-				secondaryAddr = addr
-			}
-		}
+	for _, addr := range resolvedAddrs {
+		partition(pref, addr, primaryAddr, secondaryAddr)
 		if primaryAddr != nil && secondaryAddr != nil {
 			break
 		}
@@ -80,37 +98,15 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, pref 
 	// start TCP connections to addresses
 	conns := make(chan *net.Conn, 1)
 	errors = make(chan error, 2)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(primaryAddr, port), timeout)
-		if err != nil {
-			errors <- err
-			return
-		}
-		conns <- conn
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		time.Sleep(time.Millisecond * 100)
-		conn, err := net.DialTimeout("tcp", net.JoinHostPort(secondaryAddr, port), timeout)
-		if err != nil {
-			errors <- err
-			return
-		}
-		conns <- conn
-	}()
+	cancel := make(chan struct{}, 1)
+	go dialAddr(primaryAddr.String(), port, timeout, cancel, errors, conns)
+	go dialAddr(secondaryAddr.String(), port, timeout, cancel, errors, conns)
 
-	wg.Wait()
-	close(conns)
-	close(errors)
-
-	if len(errors) > 0 && len(conns) == 0 {
-		return nil, resolvedAddrs, <-errors
-	} else if len(conns) == 0 {
-		return nil, resolvedAddrs, fmt.Errorf("Unable to create connection")
+	select {
+	case conn := <-conns:
+		cancel <- struct{}{}
+		return conn, resolvedAddrs, nil
+	case err := <-errors:
+		return nil, resolvedAddrs, err
 	}
-
-	return <-conns, resolvedAddrs, nil
 }
