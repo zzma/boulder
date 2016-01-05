@@ -25,6 +25,7 @@ import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/net/publicsuffix"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/miekg/dns"
 	"github.com/letsencrypt/boulder/probs"
+	"golang.org/x/net/proxy"
 
 	"github.com/letsencrypt/boulder/bdns"
 	"github.com/letsencrypt/boulder/core"
@@ -49,6 +50,7 @@ type ValidationAuthorityImpl struct {
 	UserAgent    string
 	stats        statsd.Statter
 	clk          clock.Clock
+	dialer       proxy.Dialer
 }
 
 // PortConfig specifies what ports the VA should call to on the remote
@@ -71,6 +73,7 @@ func NewValidationAuthorityImpl(pc *PortConfig, sbc SafeBrowsing, stats statsd.S
 		tlsPort:      pc.TLSPort,
 		stats:        stats,
 		clk:          clk,
+		dialer:       &net.Dialer{Timeout: validationTimeout},
 	}
 }
 
@@ -110,11 +113,12 @@ func (va ValidationAuthorityImpl) getAddr(hostname string) (net.IP, []net.IP, *p
 }
 
 type dialer struct {
-	record core.ValidationRecord
+	record        core.ValidationRecord
+	wrappedDialer proxy.Dialer
 }
 
 func (d *dialer) Dial(_, _ string) (net.Conn, error) {
-	realDialer := net.Dialer{Timeout: validationTimeout}
+	realDialer := d.wrappedDialer
 	return realDialer.Dial("tcp", net.JoinHostPort(d.record.AddressUsed.String(), d.record.Port))
 }
 
@@ -126,6 +130,7 @@ func (va *ValidationAuthorityImpl) resolveAndConstructDialer(name string, port i
 			Hostname: name,
 			Port:     strconv.Itoa(port),
 		},
+		wrappedDialer: va.dialer,
 	}
 
 	addr, allAddrs, err := va.getAddr(name)
@@ -297,10 +302,29 @@ func (va *ValidationAuthorityImpl) validateTLSWithZName(identifier core.AcmeIden
 	hostPort := net.JoinHostPort(addr.String(), portString)
 	validationRecords[0].Port = portString
 	va.log.Notice(fmt.Sprintf("%s [%s] Attempting to validate for %s %s", challenge.Type, identifier, hostPort, zName))
-	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: validationTimeout}, "tcp", hostPort, &tls.Config{
+
+	tcpConn, err := va.dialer.Dial("tcp", hostPort)
+	if err != nil {
+		va.log.Debug(fmt.Sprintf("%s [%s] TCP Connection failure: %s", challenge.Type, identifier, err))
+		return validationRecords, &probs.ProblemDetails{
+			Type:   parseHTTPConnError(err),
+			Detail: "Failed to connect to host for DVSNI challenge",
+		}
+	}
+	deadline := va.clk.Now().Add(validationTimeout)
+	conn := tls.Client(tcpConn, &tls.Config{
 		ServerName:         zName,
 		InsecureSkipVerify: true,
 	})
+	conn.SetDeadline(deadline)
+	err = conn.Handshake()
+	if err != nil {
+		va.log.Debug(fmt.Sprintf("%s [%s] TLS handshake failure: %s", challenge.Type, identifier, err))
+		return validationRecords, &probs.ProblemDetails{
+			Type:   parseHTTPConnError(err),
+			Detail: "Failed to connect to host for DVSNI challenge",
+		}
+	}
 
 	if err != nil {
 		va.log.Debug(fmt.Sprintf("%s [%s] TLS Connection failure: %s", challenge.Type, identifier, err))
