@@ -18,7 +18,7 @@ import (
 
 var (
 	// Private CIDRs to ignore
-	privateNetworks = []net.IPNet{
+	v4PrivateNetworks = []net.IPNet{
 		// RFC1918
 		// 10.0.0.0/8
 		net.IPNet{
@@ -112,12 +112,21 @@ var (
 			Mask: []byte{255, 192, 0, 0},
 		},
 	}
+	v6PrivateNetworks = []net.IPNet{
+		// RFC 4193
+		// fc00::/7
+		{
+			IP:   []byte{252, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			Mask: []byte{254, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		},
+	}
 )
 
 // DNSResolver defines methods used for DNS resolution
 type DNSResolver interface {
 	LookupTXT(string) ([]string, error)
-	LookupHost(string) ([]net.IP, error)
+	LookupA(string) ([]net.IP, error)
+	LookupAAAA(string) ([]net.IP, error)
 	LookupCAA(string) ([]*dns.CAA, error)
 	LookupMX(string) ([]string, error)
 }
@@ -130,6 +139,7 @@ type DNSResolverImpl struct {
 	stats                    metrics.Scope
 	txtStats                 metrics.Scope
 	aStats                   metrics.Scope
+	aaaaStats                metrics.Scope
 	caaStats                 metrics.Scope
 	mxStats                  metrics.Scope
 }
@@ -222,7 +232,7 @@ func (dnsResolver *DNSResolverImpl) LookupTXT(hostname string) ([]string, error)
 }
 
 func isPrivateV4(ip net.IP) bool {
-	for _, net := range privateNetworks {
+	for _, net := range v4PrivateNetworks {
 		if net.Contains(ip) {
 			return true
 		}
@@ -230,10 +240,19 @@ func isPrivateV4(ip net.IP) bool {
 	return false
 }
 
-// LookupHost sends a DNS query to find all A records associated with the provided
+func isPrivateV6(ip net.IP) bool {
+	for _, net := range v6PrivateNetworks {
+		if net.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// LookupA sends a DNS query to find all A records associated with the provided
 // hostname. This method assumes that the external resolver will chase CNAME/DNAME
 // aliases and return relevant A records.
-func (dnsResolver *DNSResolverImpl) LookupHost(hostname string) ([]net.IP, error) {
+func (dnsResolver *DNSResolverImpl) LookupA(hostname string) ([]net.IP, error) {
 	var addrs []net.IP
 
 	r, err := dnsResolver.exchangeOne(hostname, dns.TypeA, dnsResolver.aStats)
@@ -249,6 +268,32 @@ func (dnsResolver *DNSResolverImpl) LookupHost(hostname string) ([]net.IP, error
 		if answer.Header().Rrtype == dns.TypeA {
 			if a, ok := answer.(*dns.A); ok && a.A.To4() != nil && (!isPrivateV4(a.A) || dnsResolver.allowRestrictedAddresses) {
 				addrs = append(addrs, a.A)
+			}
+		}
+	}
+
+	return addrs, nil
+}
+
+// LookupAAAA sends a DNS query to find all AAAA records associated with the provided
+// hostname. This method assumes that the external resolver will chase CNAME/DNAME
+// aliases and return relevant A records.
+func (dnsResolver *DNSResolverImpl) LookupAAAA(hostname string) ([]net.IP, error) {
+	var addrs []net.IP
+
+	r, err := dnsResolver.exchangeOne(hostname, dns.TypeAAAA, dnsResolver.aaaaStats)
+	if err != nil {
+		return addrs, err
+	}
+	if r.Rcode != dns.RcodeSuccess {
+		err = fmt.Errorf("DNS failure: %d-%s for AAAA query", r.Rcode, dns.RcodeToString[r.Rcode])
+		return nil, err
+	}
+
+	for _, answer := range r.Answer {
+		if answer.Header().Rrtype == dns.TypeAAAA {
+			if a, ok := answer.(*dns.AAAA); ok && a.AAAA.To16() != nil && (!isPrivateV6(a.AAAA) || dnsResolver.allowRestrictedAddresses) {
+				addrs = append(addrs, a.AAAA)
 			}
 		}
 	}

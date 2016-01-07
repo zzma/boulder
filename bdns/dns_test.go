@@ -153,7 +153,7 @@ var testStats = newTestStats()
 func TestDNSNoServers(t *testing.T) {
 	obj := NewTestDNSResolverImpl(time.Hour, []string{}, testStats)
 
-	_, err := obj.LookupHost("letsencrypt.org")
+	_, err := obj.LookupA("letsencrypt.org")
 
 	test.AssertError(t, err, "No servers")
 }
@@ -161,7 +161,7 @@ func TestDNSNoServers(t *testing.T) {
 func TestDNSOneServer(t *testing.T) {
 	obj := NewTestDNSResolverImpl(time.Second*10, []string{dnsLoopbackAddr}, testStats)
 
-	_, err := obj.LookupHost("letsencrypt.org")
+	_, err := obj.LookupA("letsencrypt.org")
 
 	test.AssertNotError(t, err, "No message")
 }
@@ -169,7 +169,7 @@ func TestDNSOneServer(t *testing.T) {
 func TestDNSDuplicateServers(t *testing.T) {
 	obj := NewTestDNSResolverImpl(time.Second*10, []string{dnsLoopbackAddr, dnsLoopbackAddr}, testStats)
 
-	_, err := obj.LookupHost("letsencrypt.org")
+	_, err := obj.LookupA("letsencrypt.org")
 
 	test.AssertNotError(t, err, "No message")
 }
@@ -180,7 +180,7 @@ func TestDNSLookupsNoServer(t *testing.T) {
 	_, err := obj.LookupTXT("letsencrypt.org")
 	test.AssertError(t, err, "No servers")
 
-	_, err = obj.LookupHost("letsencrypt.org")
+	_, err = obj.LookupA("letsencrypt.org")
 	test.AssertError(t, err, "No servers")
 
 	_, err = obj.LookupCAA("letsencrypt.org")
@@ -194,8 +194,8 @@ func TestDNSServFail(t *testing.T) {
 	_, err := obj.LookupTXT(bad)
 	test.AssertError(t, err, "LookupTXT didn't return an error")
 
-	_, err = obj.LookupHost(bad)
-	test.AssertError(t, err, "LookupHost didn't return an error")
+	_, err = obj.LookupA(bad)
+	test.AssertError(t, err, "LookupA didn't return an error")
 
 	// CAA lookup ignores validation failures from the resolver for now
 	// and returns an empty list of CAA records.
@@ -218,31 +218,31 @@ func TestDNSLookupTXT(t *testing.T) {
 	test.AssertEquals(t, a[0], "abc")
 }
 
-func TestDNSLookupHost(t *testing.T) {
+func TestDNSLookupA(t *testing.T) {
 	obj := NewTestDNSResolverImpl(time.Second*10, []string{dnsLoopbackAddr}, testStats)
 
-	ip, err := obj.LookupHost("servfail.com")
+	ip, err := obj.LookupA("servfail.com")
 	t.Logf("servfail.com - IP: %s, Err: %s", ip, err)
 	test.AssertError(t, err, "Server failure")
 	test.Assert(t, len(ip) == 0, "Should not have IPs")
 
-	ip, err = obj.LookupHost("nonexistent.letsencrypt.org")
+	ip, err = obj.LookupA("nonexistent.letsencrypt.org")
 	t.Logf("nonexistent.letsencrypt.org - IP: %s, Err: %s", ip, err)
 	test.AssertNotError(t, err, "Not an error to not exist")
 	test.Assert(t, len(ip) == 0, "Should not have IPs")
 
 	// Single IPv4 address
-	ip, err = obj.LookupHost("cps.letsencrypt.org")
+	ip, err = obj.LookupA("cps.letsencrypt.org")
 	t.Logf("cps.letsencrypt.org - IP: %s, Err: %s", ip, err)
 	test.AssertNotError(t, err, "Not an error to exist")
 	test.Assert(t, len(ip) == 1, "Should have IP")
-	ip, err = obj.LookupHost("cps.letsencrypt.org")
+	ip, err = obj.LookupA("cps.letsencrypt.org")
 	t.Logf("cps.letsencrypt.org - IP: %s, Err: %s", ip, err)
 	test.AssertNotError(t, err, "Not an error to exist")
 	test.Assert(t, len(ip) == 1, "Should have IP")
 
 	// No IPv6
-	ip, err = obj.LookupHost("v6.letsencrypt.org")
+	ip, err = obj.LookupA("v6.letsencrypt.org")
 	t.Logf("v6.letsencrypt.org - IP: %s, Err: %s", ip, err)
 	test.AssertNotError(t, err, "Not an error to exist")
 	test.Assert(t, len(ip) == 0, "Should not have IPs")
