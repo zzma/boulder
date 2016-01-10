@@ -10,8 +10,8 @@ import (
 	"github.com/letsencrypt/boulder/bdns"
 )
 
-func dialAddr(addr string, port int, timeout time.Duration, cancel chan struct{}, errors chan error, conns chan *net.Conn) {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), timeout)
+func dialAddr(addr *net.IP, port int, timeout time.Duration, cancel chan struct{}, errors chan error, conns chan *net.Conn, used *net.IP) {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(addr.String(), strconv.Itoa(port)), timeout)
 	if err != nil {
 		errors <- err
 		return
@@ -19,12 +19,18 @@ func dialAddr(addr string, port int, timeout time.Duration, cancel chan struct{}
 	select {
 	case conns <- &conn:
 		// won!
+		used = addr
 	case <-cancel:
 		conn.Close()
 	}
 }
-func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeout time.Duration) (*net.Conn, []net.IP, error) {
-	// lookup addresses
+
+// DualStackLookup performs a Happy-Eyeballs (ish) attempt to connect to a host
+// over both IPv4 and IPv6. Since this type of lookup is only used for resolution
+// during validation it also returns all resolved addresses for the host and the
+// specific IP address that the returned net.Conn is connected to
+func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeout time.Duration) (*net.Conn, net.IP, []net.IP, error) {
+	// Lookup A/AAAA records concurrently
 	wg := new(sync.WaitGroup)
 	allAddrs := make(chan []net.IP, 2)
 	errors := make(chan error, 2)
@@ -34,32 +40,32 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 	}
 	for _, lookuper := range lookups {
 		wg.Add(1)
-		go func() {
+		go func(l func(string) ([]net.IP, error)) {
 			defer wg.Done()
-			addrs, err := lookuper(hostname)
+			addrs, err := l(hostname)
 			if err != nil {
 				errors <- err
 				return
 			}
 			allAddrs <- addrs
-		}()
+		}(lookuper)
 	}
 	wg.Wait()
 	close(allAddrs)
 	close(errors)
 	if len(errors) > 0 && len(allAddrs) == 0 {
-		return nil, nil, <-errors
+		return nil, nil, nil, <-errors
 	}
 	if len(allAddrs) == 0 {
-		return nil, nil, fmt.Errorf("No IPv4/6 addresses found")
+		return nil, nil, nil, fmt.Errorf("No IPv4/6 addresses found")
 	}
 
-	// choose primary/secondary addresses
+	// Choose primary/secondary addresses
 	resolvedAddrs := []net.IP{}
 	var primaryAddr *net.IP
 	var secondaryAddr *net.IP
 	for addrs := range allAddrs {
-		for addr := range addrs {
+		for _, addr := range addrs {
 			if len(addr) == net.IPv6len && primaryAddr == nil {
 				primaryAddr = &addr
 			} else if secondaryAddr == nil {
@@ -69,17 +75,19 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 		}
 	}
 	if primaryAddr == nil && secondaryAddr == nil {
-		return nil, resolvedAddrs, fmt.Errorf("No suitable addresses found")
+		// idk how this would happen but belt and bracers
+		return nil, nil, resolvedAddrs, fmt.Errorf("No suitable addresses found")
 	}
 
-	// start TCP connections to addresses
+	// Start TCP connections to addresses
 	conns := make(chan *net.Conn, 1)
+	var usedAddr *net.IP
 	errors = make(chan error, 2)
 	cancel := make(chan struct{}, 1)
 	attempts := 0
 	if primaryAddr != nil {
 		attempts++
-		go dialAddr(primaryAddr.String(), port, timeout, cancel, errors, conns)
+		go dialAddr(primaryAddr, port, timeout, cancel, errors, conns, usedAddr)
 	}
 	if secondaryAddr != nil {
 		attempts++
@@ -87,22 +95,26 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 			if primaryAddr != nil {
 				time.Sleep(time.Millisecond * 100)
 			}
-			dialAddr(secondaryAddr.String(), port, timeout, cancel, errors, conns)
-		}
+			dialAddr(secondaryAddr, port, timeout, cancel, errors, conns, usedAddr)
+		}()
 	}
 
-	// wait for connection or errors
-	var otherErr *error
+	// Wait for connection or errors
+	var otherErr error
 	for {
 		select {
 		case conn := <-conns:
+			// Race is over, cancel other attempt and return connection, used address,
+			// and all resolved addresses
 			cancel <- struct{}{}
-			return conn, resolvedAddrs, nil
+			return conn, *usedAddr, resolvedAddrs, nil
 		case err := <-errors:
+			// If two attempts were made wait until two errors are returned before failing
+			// out of the process. If only one attempt was made then fail immediately
 			if otherErr != nil && attempts == 2 {
-				return nil, fmt.Errorf("Both connection attempts failed, [%s], [%s]", err.String(), otherErr.String())
+				return nil, nil, resolvedAddrs, fmt.Errorf("Both connection attempts failed, [%s], [%s]", err, otherErr)
 			} else if attempts == 1 {
-				return nil, resolvedAddrs, err
+				return nil, nil, resolvedAddrs, err
 			} else {
 				otherErr = err
 			}
