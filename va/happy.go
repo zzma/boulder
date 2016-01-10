@@ -10,13 +10,6 @@ import (
 	"github.com/letsencrypt/boulder/bdns"
 )
 
-type TypePreference int
-
-var (
-	V4 = TypePreference(0)
-	V6 = TypePreference(1)
-)
-
 func dialAddr(addr string, port int, timeout time.Duration, cancel chan struct{}, errors chan error, conns chan *net.Conn) {
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(addr, strconv.Itoa(port)), timeout)
 	if err != nil {
@@ -30,24 +23,7 @@ func dialAddr(addr string, port int, timeout time.Duration, cancel chan struct{}
 		conn.Close()
 	}
 }
-
-func partition(pref TypePreference, addr net.IP, primary *net.IP, secondary *net.IP) {
-	if pref == V6 {
-		if len(addr) == net.IPv6len {
-			primary = &addr
-		} else {
-			secondary = &addr
-		}
-	} else {
-		if len(addr) == net.IPv4len {
-			primary = &addr
-		} else {
-			secondary = &addr
-		}
-	}
-}
-
-func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, pref TypePreference, timeout time.Duration) (*net.Conn, []net.IP, error) {
+func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeout time.Duration) (*net.Conn, []net.IP, error) {
 	// lookup addresses
 	wg := new(sync.WaitGroup)
 	allAddrs := make(chan net.IP, 2)
@@ -71,7 +47,7 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, pref 
 	wg.Wait()
 	close(allAddrs)
 	close(errors)
-	if len(errors) > 0 {
+	if len(errors) > 0 && len(allAddrs) == 0 {
 		return nil, nil, <-errors
 	}
 	if len(allAddrs) == 0 {
@@ -86,7 +62,11 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, pref 
 		resolvedAddrs = append(resolvedAddrs, addr)
 	}
 	for _, addr := range resolvedAddrs {
-		partition(pref, addr, primaryAddr, secondaryAddr)
+		if len(addr) == net.IPv6len {
+			primaryAddr = &addr
+		} else {
+			secondaryAddr = &addr
+		}
 		if primaryAddr != nil && secondaryAddr != nil {
 			break
 		}
@@ -99,14 +79,36 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, pref 
 	conns := make(chan *net.Conn, 1)
 	errors = make(chan error, 2)
 	cancel := make(chan struct{}, 1)
-	go dialAddr(primaryAddr.String(), port, timeout, cancel, errors, conns)
-	go dialAddr(secondaryAddr.String(), port, timeout, cancel, errors, conns)
+	attempts := 0
+	if primaryAddr != nil {
+		attempts++
+		go dialAddr(primaryAddr.String(), port, timeout, cancel, errors, conns)
+	}
+	if secondaryAddr != nil {
+		go func() {
+			attempts++
+			if primaryAddr != nil {
+				time.Sleep(time.Millisecond * 100)
+			}
+			dialAddr(secondaryAddr.String(), port, timeout, cancel, errors, conns)
+		}
+	}
 
-	select {
-	case conn := <-conns:
-		cancel <- struct{}{}
-		return conn, resolvedAddrs, nil
-	case err := <-errors:
-		return nil, resolvedAddrs, err
+	// wait for connection or errors
+	var otherErr *error
+	for {
+		select {
+		case conn := <-conns:
+			cancel <- struct{}{}
+			return conn, resolvedAddrs, nil
+		case err := <-errors:
+			if otherErr != nil && attempts == 2 {
+				return nil, fmt.Errorf("Both connection attempts failed, [%s], [%s]", err.String(), otherErr.String())
+			} else if attempts == 1 {
+				return nil, resolvedAddrs, err
+			} else {
+				otherErr = err
+			}
+		}
 	}
 }
