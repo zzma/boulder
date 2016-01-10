@@ -304,6 +304,7 @@ func (va *ValidationAuthorityImpl) validateTLSWithZName(ctx context.Context, ide
 	validationRecords[0].Port = portString
 	va.log.Notice(fmt.Sprintf("%s [%s] Attempting to validate for %s %s", challenge.Type, identifier, hostPort, zName))
 
+	deadline := va.clk.Now().Add(validationTimeout)
 	tcpConn, err := va.dialer.Dial("tcp", hostPort)
 	if err != nil {
 		va.log.Debug(fmt.Sprintf("%s [%s] TCP Connection failure: %s", challenge.Type, identifier, err))
@@ -312,7 +313,6 @@ func (va *ValidationAuthorityImpl) validateTLSWithZName(ctx context.Context, ide
 			Detail: "Failed to connect to host for DVSNI challenge",
 		}
 	}
-	deadline := va.clk.Now().Add(validationTimeout)
 	conn := tls.Client(tcpConn, &tls.Config{
 		ServerName:         zName,
 		InsecureSkipVerify: true,
