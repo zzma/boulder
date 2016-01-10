@@ -24,6 +24,7 @@ import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/net/publicsuffix"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/miekg/dns"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/letsencrypt/boulder/probs"
 	"golang.org/x/net/proxy"
 
@@ -88,15 +89,15 @@ type verificationRequestEvent struct {
 }
 
 // getAddr will query for all A records associated with hostname and return the
-// prefered address, the first net.IP in the addrs slice, and all addresses resolved.
+// preferred address, the first net.IP in the addrs slice, and all addresses resolved.
 // This is the same choice made by the Go internal resolution library used by
 // net/http, except we only send A queries and accept IPv4 addresses.
 // TODO(#593): Add IPv6 support
-func (va ValidationAuthorityImpl) getAddr(hostname string) (net.IP, []net.IP, *probs.ProblemDetails) {
-	addrs, err := va.DNSResolver.LookupHost(hostname)
+func (va ValidationAuthorityImpl) getAddr(ctx context.Context, hostname string) (net.IP, []net.IP, *probs.ProblemDetails) {
+	addrs, err := va.DNSResolver.LookupHost(ctx, hostname)
 	if err != nil {
 		va.log.Debug(fmt.Sprintf("%s DNS failure: %s", hostname, err))
-		problem := bdns.ProblemDetailsFromDNSError("A", hostname, err)
+		problem := bdns.ProblemDetailsFromDNSError(err)
 		return net.IP{}, nil, problem
 	}
 
@@ -122,9 +123,9 @@ func (d *dialer) Dial(_, _ string) (net.Conn, error) {
 	return realDialer.Dial("tcp", net.JoinHostPort(d.record.AddressUsed.String(), d.record.Port))
 }
 
-// resolveAndConstructDialer gets the prefered address using va.getAddr and returns
+// resolveAndConstructDialer gets the preferred address using va.getAddr and returns
 // the chosen address and dialer for that address and correct port.
-func (va *ValidationAuthorityImpl) resolveAndConstructDialer(name string, port int) (dialer, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) resolveAndConstructDialer(ctx context.Context, name string, port int) (dialer, *probs.ProblemDetails) {
 	d := dialer{
 		record: core.ValidationRecord{
 			Hostname: name,
@@ -133,7 +134,7 @@ func (va *ValidationAuthorityImpl) resolveAndConstructDialer(name string, port i
 		wrappedDialer: va.dialer,
 	}
 
-	addr, allAddrs, err := va.getAddr(name)
+	addr, allAddrs, err := va.getAddr(ctx, name)
 	if err != nil {
 		return d, err
 	}
@@ -144,7 +145,7 @@ func (va *ValidationAuthorityImpl) resolveAndConstructDialer(name string, port i
 
 // Validation methods
 
-func (va *ValidationAuthorityImpl) fetchHTTP(identifier core.AcmeIdentifier, path string, useTLS bool, input core.Challenge) ([]byte, []core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) fetchHTTP(ctx context.Context, identifier core.AcmeIdentifier, path string, useTLS bool, input core.Challenge) ([]byte, []core.ValidationRecord, *probs.ProblemDetails) {
 	challenge := input
 
 	host := identifier.Value
@@ -182,7 +183,7 @@ func (va *ValidationAuthorityImpl) fetchHTTP(identifier core.AcmeIdentifier, pat
 		httpRequest.Header["User-Agent"] = []string{va.UserAgent}
 	}
 
-	dialer, prob := va.resolveAndConstructDialer(host, port)
+	dialer, prob := va.resolveAndConstructDialer(ctx, host, port)
 	dialer.record.URL = url.String()
 	validationRecords := []core.ValidationRecord{dialer.record}
 	if prob != nil {
@@ -241,7 +242,7 @@ func (va *ValidationAuthorityImpl) fetchHTTP(identifier core.AcmeIdentifier, pat
 			reqPort = 80
 		}
 
-		dialer, err := va.resolveAndConstructDialer(reqHost, reqPort)
+		dialer, err := va.resolveAndConstructDialer(ctx, reqHost, reqPort)
 		dialer.record.URL = req.URL.String()
 		validationRecords = append(validationRecords, dialer.record)
 		if err != nil {
@@ -284,8 +285,8 @@ func (va *ValidationAuthorityImpl) fetchHTTP(identifier core.AcmeIdentifier, pat
 	return body, validationRecords, nil
 }
 
-func (va *ValidationAuthorityImpl) validateTLSWithZName(identifier core.AcmeIdentifier, challenge core.Challenge, zName string) ([]core.ValidationRecord, *probs.ProblemDetails) {
-	addr, allAddrs, problem := va.getAddr(identifier.Value)
+func (va *ValidationAuthorityImpl) validateTLSWithZName(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, zName string) ([]core.ValidationRecord, *probs.ProblemDetails) {
+	addr, allAddrs, problem := va.getAddr(ctx, identifier.Value)
 	validationRecords := []core.ValidationRecord{
 		core.ValidationRecord{
 			Hostname:          identifier.Value,
@@ -356,7 +357,7 @@ func (va *ValidationAuthorityImpl) validateTLSWithZName(identifier core.AcmeIden
 	}
 }
 
-func (va *ValidationAuthorityImpl) validateHTTP01(identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateHTTP01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
 	if identifier.Type != core.IdentifierDNS {
 		va.log.Debug(fmt.Sprintf("%s [%s] Identifier failure", challenge.Type, identifier))
 		return nil, &probs.ProblemDetails{
@@ -367,7 +368,7 @@ func (va *ValidationAuthorityImpl) validateHTTP01(identifier core.AcmeIdentifier
 
 	// Perform the fetch
 	path := fmt.Sprintf(".well-known/acme-challenge/%s", challenge.Token)
-	body, validationRecords, err := va.fetchHTTP(identifier, path, false, challenge)
+	body, validationRecords, err := va.fetchHTTP(ctx, identifier, path, false, challenge)
 	if err != nil {
 		return validationRecords, err
 	}
@@ -398,7 +399,7 @@ func (va *ValidationAuthorityImpl) validateHTTP01(identifier core.AcmeIdentifier
 	return validationRecords, nil
 }
 
-func (va *ValidationAuthorityImpl) validateTLSSNI01(identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateTLSSNI01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
 	if identifier.Type != "dns" {
 		va.log.Debug(fmt.Sprintf("TLS-SNI [%s] Identifier failure", identifier))
 		return nil, &probs.ProblemDetails{
@@ -413,7 +414,7 @@ func (va *ValidationAuthorityImpl) validateTLSSNI01(identifier core.AcmeIdentifi
 	Z := hex.EncodeToString(h.Sum(nil))
 	ZName := fmt.Sprintf("%s.%s.%s", Z[:32], Z[32:], core.TLSSNISuffix)
 
-	return va.validateTLSWithZName(identifier, challenge, ZName)
+	return va.validateTLSWithZName(ctx, identifier, challenge, ZName)
 }
 
 // parseHTTPConnError returns the ACME ProblemType corresponding to an error
@@ -438,7 +439,7 @@ func parseHTTPConnError(err error) probs.ProblemType {
 	return probs.ConnectionProblem
 }
 
-func (va *ValidationAuthorityImpl) validateDNS01(identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateDNS01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
 	if identifier.Type != core.IdentifierDNS {
 		va.log.Debug(fmt.Sprintf("DNS [%s] Identifier failure", identifier))
 		return nil, &probs.ProblemDetails{
@@ -454,18 +455,21 @@ func (va *ValidationAuthorityImpl) validateDNS01(identifier core.AcmeIdentifier,
 
 	// Look for the required record in the DNS
 	challengeSubdomain := fmt.Sprintf("%s.%s", core.DNSPrefix, identifier.Value)
-	txts, err := va.DNSResolver.LookupTXT(challengeSubdomain)
+	txts, authorities, err := va.DNSResolver.LookupTXT(ctx, challengeSubdomain)
 
 	if err != nil {
 		va.log.Debug(fmt.Sprintf("%s [%s] DNS failure: %s", challenge.Type, identifier, err))
 
-		return nil, bdns.ProblemDetailsFromDNSError("TXT", challengeSubdomain, err)
+		return nil, bdns.ProblemDetailsFromDNSError(err)
 	}
 
 	for _, element := range txts {
 		if subtle.ConstantTimeCompare([]byte(element), []byte(authorizedKeysDigest)) == 1 {
 			// Successful challenge validation
-			return nil, nil
+			return []core.ValidationRecord{{
+				Authorities: authorities,
+				Hostname:    identifier.Value,
+			}}, nil
 		}
 	}
 
@@ -475,12 +479,12 @@ func (va *ValidationAuthorityImpl) validateDNS01(identifier core.AcmeIdentifier,
 	}
 }
 
-func (va *ValidationAuthorityImpl) checkCAA(identifier core.AcmeIdentifier, regID int64) *probs.ProblemDetails {
+func (va *ValidationAuthorityImpl) checkCAA(ctx context.Context, identifier core.AcmeIdentifier, regID int64) *probs.ProblemDetails {
 	// Check CAA records for the requested identifier
-	present, valid, err := va.CheckCAARecords(identifier)
+	present, valid, err := va.checkCAARecords(ctx, identifier)
 	if err != nil {
 		va.log.Warning(fmt.Sprintf("Problem checking CAA: %s", err))
-		return bdns.ProblemDetailsFromDNSError("CAA", identifier.Value, err)
+		return bdns.ProblemDetailsFromDNSError(err)
 	}
 	// AUDIT[ Certificate Requests ] 11917fa4-10ef-4e0d-9105-bacbe7836a3c
 	va.log.Audit(fmt.Sprintf("Checked CAA records for %s, registration ID %d [Present: %t, Valid for issuance: %t]", identifier.Value, regID, present, valid))
@@ -495,7 +499,7 @@ func (va *ValidationAuthorityImpl) checkCAA(identifier core.AcmeIdentifier, regI
 
 // Overall validation process
 
-func (va *ValidationAuthorityImpl) validate(authz core.Authorization, challengeIndex int) {
+func (va *ValidationAuthorityImpl) validate(ctx context.Context, authz core.Authorization, challengeIndex int) {
 	logEvent := verificationRequestEvent{
 		ID:          authz.ID,
 		Requester:   authz.RegistrationID,
@@ -503,7 +507,7 @@ func (va *ValidationAuthorityImpl) validate(authz core.Authorization, challengeI
 	}
 	challenge := &authz.Challenges[challengeIndex]
 	vStart := va.clk.Now()
-	validationRecords, prob := va.validateChallengeAndCAA(authz.Identifier, *challenge, authz.RegistrationID)
+	validationRecords, prob := va.validateChallengeAndCAA(ctx, authz.Identifier, *challenge, authz.RegistrationID)
 	va.stats.TimingDuration(fmt.Sprintf("VA.Validations.%s.%s", challenge.Type, challenge.Status), time.Since(vStart), 1.0)
 
 	challenge.ValidationRecord = validationRecords
@@ -529,13 +533,14 @@ func (va *ValidationAuthorityImpl) validate(authz core.Authorization, challengeI
 	va.RA.OnValidationUpdate(authz)
 }
 
-func (va *ValidationAuthorityImpl) validateChallengeAndCAA(identifier core.AcmeIdentifier, challenge core.Challenge, regID int64) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateChallengeAndCAA(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, regID int64) ([]core.ValidationRecord, *probs.ProblemDetails) {
 	ch := make(chan *probs.ProblemDetails, 1)
 	go func() {
-		ch <- va.checkCAA(identifier, regID)
+		ch <- va.checkCAA(ctx, identifier, regID)
 	}()
 
-	validationRecords, err := va.validateChallenge(identifier, challenge)
+	// TODO(#1292): send into another goroutine
+	validationRecords, err := va.validateChallenge(ctx, identifier, challenge)
 	if err != nil {
 		return validationRecords, err
 	}
@@ -547,7 +552,7 @@ func (va *ValidationAuthorityImpl) validateChallengeAndCAA(identifier core.AcmeI
 	return validationRecords, nil
 }
 
-func (va *ValidationAuthorityImpl) validateChallenge(identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateChallenge(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
 	if !challenge.IsSane(true) {
 		return nil, &probs.ProblemDetails{
 			Type:   probs.MalformedProblem,
@@ -556,11 +561,11 @@ func (va *ValidationAuthorityImpl) validateChallenge(identifier core.AcmeIdentif
 	}
 	switch challenge.Type {
 	case core.ChallengeTypeHTTP01:
-		return va.validateHTTP01(identifier, challenge)
+		return va.validateHTTP01(ctx, identifier, challenge)
 	case core.ChallengeTypeTLSSNI01:
-		return va.validateTLSSNI01(identifier, challenge)
+		return va.validateTLSSNI01(ctx, identifier, challenge)
 	case core.ChallengeTypeDNS01:
-		return va.validateDNS01(identifier, challenge)
+		return va.validateDNS01(ctx, identifier, challenge)
 	}
 	return nil, &probs.ProblemDetails{
 		Type:   probs.MalformedProblem,
@@ -570,7 +575,8 @@ func (va *ValidationAuthorityImpl) validateChallenge(identifier core.AcmeIdentif
 
 // UpdateValidations runs the validate() method asynchronously using goroutines.
 func (va *ValidationAuthorityImpl) UpdateValidations(authz core.Authorization, challengeIndex int) error {
-	go va.validate(authz, challengeIndex)
+	// TODO(#1292): add a proper deadline here
+	go va.validate(context.TODO(), authz, challengeIndex)
 	return nil
 }
 
@@ -617,7 +623,7 @@ func newCAASet(CAAs []*dns.CAA) *CAASet {
 	return &filtered
 }
 
-func (va *ValidationAuthorityImpl) getCAASet(hostname string) (*CAASet, error) {
+func (va *ValidationAuthorityImpl) getCAASet(ctx context.Context, hostname string) (*CAASet, error) {
 	hostname = strings.TrimRight(hostname, ".")
 	labels := strings.Split(hostname, ".")
 	// See RFC 6844 "Certification Authority Processing" for pseudocode.
@@ -630,7 +636,7 @@ func (va *ValidationAuthorityImpl) getCAASet(hostname string) (*CAASet, error) {
 		if tld, err := publicsuffix.ICANNTLD(name); err != nil || tld == name {
 			break
 		}
-		CAAs, err := va.DNSResolver.LookupCAA(name)
+		CAAs, err := va.DNSResolver.LookupCAA(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -645,8 +651,13 @@ func (va *ValidationAuthorityImpl) getCAASet(hostname string) (*CAASet, error) {
 // CheckCAARecords verifies that, if the indicated subscriber domain has any CAA
 // records, they authorize the configured CA domain to issue a certificate
 func (va *ValidationAuthorityImpl) CheckCAARecords(identifier core.AcmeIdentifier) (present, valid bool, err error) {
+	// TODO(#1292): add a proper deadline here
+	return va.checkCAARecords(context.TODO(), identifier)
+}
+
+func (va *ValidationAuthorityImpl) checkCAARecords(ctx context.Context, identifier core.AcmeIdentifier) (present, valid bool, err error) {
 	hostname := strings.ToLower(identifier.Value)
-	caaSet, err := va.getCAASet(hostname)
+	caaSet, err := va.getCAASet(ctx, hostname)
 	if err != nil {
 		return
 	}

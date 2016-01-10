@@ -22,6 +22,8 @@ import (
 	cfsslConfig "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cloudflare/cfssl/config"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/letsencrypt/boulder/bdns"
 	"github.com/letsencrypt/boulder/ca"
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"
@@ -145,6 +147,12 @@ func makeResponse(ch core.Challenge) (out core.Challenge, err error) {
 	return
 }
 
+var testKeyPolicy = core.KeyPolicy{
+	AllowRSA:           true,
+	AllowECDSANISTP256: true,
+	AllowECDSANISTP384: true,
+}
+
 func initAuthorities(t *testing.T) (*DummyValidationAuthority, *sa.SQLStorageAuthority, *RegistrationAuthorityImpl, clock.FakeClock, func()) {
 	err := json.Unmarshal(AccountKeyJSONA, &AccountKeyA)
 	test.AssertNotError(t, err, "Failed to unmarshal public JWK")
@@ -214,7 +222,8 @@ func initAuthorities(t *testing.T) (*DummyValidationAuthority, *sa.SQLStorageAut
 		fc,
 		stats,
 		caCert,
-		caKey)
+		caKey,
+		testKeyPolicy)
 	test.AssertNotError(t, err, "Couldn't create CA")
 	ca.SA = ssa
 	ca.PA = pa
@@ -241,12 +250,12 @@ func initAuthorities(t *testing.T) (*DummyValidationAuthority, *sa.SQLStorageAut
 				Threshold: 100,
 				Window:    cmd.ConfigDuration{Duration: 24 * 90 * time.Hour},
 			},
-		}, 1)
+		}, 1, testKeyPolicy)
 	ra.SA = ssa
 	ra.VA = va
 	ra.CA = ca
 	ra.PA = pa
-	ra.DNSResolver = &mocks.DNSResolver{}
+	ra.DNSResolver = &bdns.MockDNSResolver{}
 
 	AuthzInitial.RegistrationID = Registration.ID
 
@@ -288,25 +297,25 @@ func TestValidateContacts(t *testing.T) {
 	validEmail, _ := core.ParseAcmeURL("mailto:admin@email.com")
 	malformedEmail, _ := core.ParseAcmeURL("mailto:admin.com")
 
-	err := ra.validateContacts([]*core.AcmeURL{})
+	err := ra.validateContacts(context.Background(), []*core.AcmeURL{})
 	test.AssertNotError(t, err, "No Contacts")
 
-	err = ra.validateContacts([]*core.AcmeURL{tel, validEmail})
+	err = ra.validateContacts(context.Background(), []*core.AcmeURL{tel, validEmail})
 	test.AssertError(t, err, "Too Many Contacts")
 
-	err = ra.validateContacts([]*core.AcmeURL{tel})
+	err = ra.validateContacts(context.Background(), []*core.AcmeURL{tel})
 	test.AssertNotError(t, err, "Simple Telephone")
 
-	err = ra.validateContacts([]*core.AcmeURL{validEmail})
+	err = ra.validateContacts(context.Background(), []*core.AcmeURL{validEmail})
 	test.AssertNotError(t, err, "Valid Email")
 
-	err = ra.validateContacts([]*core.AcmeURL{malformedEmail})
+	err = ra.validateContacts(context.Background(), []*core.AcmeURL{malformedEmail})
 	test.AssertError(t, err, "Malformed Email")
 
-	err = ra.validateContacts([]*core.AcmeURL{ansible})
+	err = ra.validateContacts(context.Background(), []*core.AcmeURL{ansible})
 	test.AssertError(t, err, "Unknown scheme")
 
-	err = ra.validateContacts([]*core.AcmeURL{nil})
+	err = ra.validateContacts(context.Background(), []*core.AcmeURL{nil})
 	test.AssertError(t, err, "Nil AcmeURL")
 }
 
@@ -317,15 +326,16 @@ func TestValidateEmail(t *testing.T) {
 	}{
 		{"an email`", unparseableEmailDetail},
 		{"a@always.invalid", emptyDNSResponseDetail},
-		{"a@always.timeout", "DNS query timed out during A-record lookup of always.timeout"},
-		{"a@always.error", "DNS networking error during A-record lookup of always.error"},
+		{"a@always.timeout", "DNS problem: query timed out looking up A for always.timeout"},
+		{"a@always.error", "DNS problem: networking error looking up A for always.error"},
 	}
 	testSuccesses := []string{
 		"a@email.com",
 		"b@email.only",
 	}
+
 	for _, tc := range testFailures {
-		problem := validateEmail(tc.input, &mocks.DNSResolver{})
+		problem := validateEmail(context.Background(), tc.input, &bdns.MockDNSResolver{})
 		if problem.Type != probs.InvalidEmailProblem {
 			t.Errorf("validateEmail(%q): got problem type %#v, expected %#v", tc.input, problem.Type, probs.InvalidEmailProblem)
 		}
@@ -336,7 +346,7 @@ func TestValidateEmail(t *testing.T) {
 	}
 
 	for _, addr := range testSuccesses {
-		if prob := validateEmail(addr, &mocks.DNSResolver{}); prob != nil {
+		if prob := validateEmail(context.Background(), addr, &bdns.MockDNSResolver{}); prob != nil {
 			t.Errorf("validateEmail(%q): expected success, but it failed: %s",
 				addr, prob)
 		}
