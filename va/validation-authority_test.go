@@ -297,7 +297,6 @@ func TestHTTP(t *testing.T) {
 	took := time.Since(started)
 	// Check that the HTTP connection times out after 5 seconds and doesn't block for 10 seconds
 	test.Assert(t, (took > (time.Second * 5)), "HTTP timed out before 5 seconds")
-	fmt.Println(took)
 	test.Assert(t, (took < (time.Second * 10)), "HTTP connection didn't timeout after 5 seconds")
 	if prob == nil {
 		t.Fatalf("Connection should've timed out")
@@ -473,7 +472,6 @@ func TestTLSSNI(t *testing.T) {
 	took := time.Since(started)
 	// Check that the HTTP connection times out after 5 seconds and doesn't block for 10 seconds
 	test.Assert(t, (took > (time.Second * 5)), "HTTP timed out before 5 seconds")
-	fmt.Println(took, prob)
 	test.Assert(t, (took < (time.Second * 10)), "HTTP connection didn't timeout after 5 seconds")
 	if prob == nil {
 		t.Fatalf("Connection should've timed out")
