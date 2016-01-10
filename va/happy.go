@@ -26,7 +26,7 @@ func dialAddr(addr string, port int, timeout time.Duration, cancel chan struct{}
 func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeout time.Duration) (*net.Conn, []net.IP, error) {
 	// lookup addresses
 	wg := new(sync.WaitGroup)
-	allAddrs := make(chan net.IP, 2)
+	allAddrs := make(chan []net.IP, 2)
 	errors := make(chan error, 2)
 	lookups := []func(string) ([]net.IP, error){
 		resolver.LookupA,
@@ -80,8 +80,8 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 		go dialAddr(primaryAddr.String(), port, timeout, cancel, errors, conns)
 	}
 	if secondaryAddr != nil {
+		attempts++
 		go func() {
-			attempts++
 			if primaryAddr != nil {
 				time.Sleep(time.Millisecond * 100)
 			}
