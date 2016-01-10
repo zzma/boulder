@@ -58,13 +58,15 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 	resolvedAddrs := []net.IP{}
 	var primaryAddr *net.IP
 	var secondaryAddr *net.IP
-	for addr := range allAddrs {
-		if len(addr) == net.IPv6len && primaryAddr == nil {
-			primaryAddr = &addr
-		} else if secondaryAddr == nil {
-			secondaryAddr = &addr
+	for addrs := range allAddrs {
+		for addr := range addrs {
+			if len(addr) == net.IPv6len && primaryAddr == nil {
+				primaryAddr = &addr
+			} else if secondaryAddr == nil {
+				secondaryAddr = &addr
+			}
+			resolvedAddrs = append(resolvedAddrs, addr)
 		}
-		resolvedAddrs = append(resolvedAddrs, addr)
 	}
 	if primaryAddr == nil && secondaryAddr == nil {
 		return nil, resolvedAddrs, fmt.Errorf("No suitable addresses found")
