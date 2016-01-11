@@ -10,6 +10,8 @@ import (
 	"github.com/letsencrypt/boulder/bdns"
 )
 
+// dialAddr does the actual dialing of a network address and returns
+// a net.Conn or error via the provided channels
 func dialAddr(addr *net.IP, port int, timeout time.Duration, cancel chan struct{}, errors chan error, conns chan *net.Conn, used *net.IP) {
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(addr.String(), strconv.Itoa(port)), timeout)
 	if err != nil {
@@ -28,8 +30,8 @@ func dialAddr(addr *net.IP, port int, timeout time.Duration, cancel chan struct{
 // DualStackLookup performs a Happy-Eyeballs (ish) attempt to connect to a host
 // over both IPv4 and IPv6. Since this type of lookup is only used for resolution
 // during validation it also returns all resolved addresses for the host and the
-// specific IP address that the returned net.Conn is connected to
-func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeout time.Duration) (*net.Conn, net.IP, []net.IP, error) {
+// specific IP address that the returned net.Conn connected to
+func DualStackLookup(hostname string, port int, timeout time.Duration, resolver bdns.DNSResolver) (*net.Conn, net.IP, []net.IP, error) {
 	// Lookup A/AAAA records concurrently
 	wg := new(sync.WaitGroup)
 	allAddrs := make(chan []net.IP, 2)
@@ -71,6 +73,7 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 			} else if secondaryAddr == nil {
 				secondaryAddr = &addr
 			}
+			// Collect all resolved addresses for the ValidationRecord
 			resolvedAddrs = append(resolvedAddrs, addr)
 		}
 	}
@@ -93,6 +96,7 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 		attempts++
 		go func() {
 			if primaryAddr != nil {
+				// If we are dialing both v6 and v4 give v6 a slight headstart
 				time.Sleep(time.Millisecond * 100)
 			}
 			dialAddr(secondaryAddr, port, timeout, cancel, errors, conns, usedAddr)
@@ -105,7 +109,7 @@ func DualStackLookup(hostname string, port int, resolver bdns.DNSResolver, timeo
 		select {
 		case conn := <-conns:
 			// Race is over, cancel other attempt and return connection, used address,
-			// and all resolved addresses
+			// and all other resolved addresses
 			cancel <- struct{}{}
 			return conn, *usedAddr, resolvedAddrs, nil
 		case err := <-errors:
