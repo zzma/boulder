@@ -63,9 +63,23 @@ type PortConfig struct {
 }
 
 // NewValidationAuthorityImpl constructs a new VA
-func NewValidationAuthorityImpl(pc *PortConfig, sbc SafeBrowsing, stats statsd.Statter, clk clock.Clock) *ValidationAuthorityImpl {
+func NewValidationAuthorityImpl(pc *PortConfig, sbc SafeBrowsing, stats statsd.Statter, clk clock.Clock, validationProxy *string) (*ValidationAuthorityImpl, error) {
 	logger := blog.GetAuditLogger()
 	logger.Notice("Validation Authority Starting")
+	var dialer proxy.Dialer
+	if validationProxy != nil {
+		proxyURI, err := url.Parse(*validationProxy)
+		if err != nil {
+			return nil, err
+		}
+		proxyDialer, err := proxy.FromURL(proxyURI, &net.Dialer{Timeout: validationTimeout})
+		if err != nil {
+			return nil, err
+		}
+		dialer = proxyDialer
+	} else {
+		dialer = &net.Dialer{Timeout: validationTimeout}
+	}
 	return &ValidationAuthorityImpl{
 		SafeBrowsing: sbc,
 		log:          logger,
@@ -74,8 +88,8 @@ func NewValidationAuthorityImpl(pc *PortConfig, sbc SafeBrowsing, stats statsd.S
 		tlsPort:      pc.TLSPort,
 		stats:        stats,
 		clk:          clk,
-		dialer:       &net.Dialer{Timeout: validationTimeout},
-	}
+		dialer:       dialer,
+	}, nil
 }
 
 // Used for audit logging

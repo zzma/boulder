@@ -14,6 +14,7 @@ import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
 	safebrowsing "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-safe-browsing-api"
 	"github.com/letsencrypt/boulder/core"
+	"github.com/letsencrypt/boulder/test"
 )
 
 func TestIsSafeDomain(t *testing.T) {
@@ -32,7 +33,8 @@ func TestIsSafeDomain(t *testing.T) {
 	sbc.EXPECT().IsListed("bad.com").Return("bad", nil)
 	sbc.EXPECT().IsListed("errorful.com").Return("", errors.New("welp"))
 	sbc.EXPECT().IsListed("outofdate.com").Return("", safebrowsing.ErrOutOfDateHashes)
-	va := NewValidationAuthorityImpl(&PortConfig{}, sbc, stats, clock.NewFake())
+	va, err := NewValidationAuthorityImpl(&PortConfig{}, sbc, stats, clock.NewFake(), nil)
+	test.AssertNotError(t, err, "Failed to create VA")
 
 	resp, err := va.IsSafeDomain(&core.IsSafeDomainRequest{Domain: "good.com"})
 	if err != nil {
@@ -63,7 +65,8 @@ func TestIsSafeDomain(t *testing.T) {
 
 func TestAllowNilInIsSafeDomain(t *testing.T) {
 	stats, _ := statsd.NewNoopClient()
-	va := NewValidationAuthorityImpl(&PortConfig{}, nil, stats, clock.NewFake())
+	va, err := NewValidationAuthorityImpl(&PortConfig{}, nil, stats, clock.NewFake(), nil)
+	test.AssertNotError(t, err, "Failed to create VA")
 
 	// Be cool with a nil SafeBrowsing. This will happen in prod when we have
 	// flag mismatch between the VA and RA.

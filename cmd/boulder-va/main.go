@@ -44,7 +44,8 @@ func main() {
 		}
 		clk := clock.Default()
 		sbc := newGoogleSafeBrowsing(c.VA.GoogleSafeBrowsing)
-		vai := va.NewValidationAuthorityImpl(pc, sbc, stats, clk)
+		vai, err := va.NewValidationAuthorityImpl(pc, sbc, stats, clk, c.VA.ValidationProxy)
+		cmd.FailOnError(err, "Failed to create VA")
 		dnsTimeout, err := time.ParseDuration(c.Common.DNSTimeout)
 		cmd.FailOnError(err, "Couldn't parse DNS timeout")
 		scoped := metrics.NewStatsdScope(stats, "VA", "DNS")

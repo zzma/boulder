@@ -89,6 +89,8 @@ type Config struct {
 
 		GoogleSafeBrowsing *GoogleSafeBrowsingConfig
 
+		ValidationProxy *string
+
 		// The number of times to try a DNS query (that has a temporary error)
 		// before giving up. May be short-circuited by deadlines. A zero value
 		// will be turned into 1.
