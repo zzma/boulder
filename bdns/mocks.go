@@ -45,11 +45,11 @@ func (t timeoutError) Timeout() bool {
 	return true
 }
 
-// LookupHost is a mock
+// LookupA is a mock
 //
 // Note: see comments on LookupMX regarding email.only
 //
-func (mock *MockDNSResolver) LookupHost(_ context.Context, hostname string) ([]net.IP, error) {
+func (mock *MockDNSResolver) LookupA(_ context.Context, hostname string) ([]net.IP, error) {
 	if hostname == "always.invalid" ||
 		hostname == "invalid.invalid" ||
 		hostname == "email.only" {
@@ -65,6 +65,11 @@ func (mock *MockDNSResolver) LookupHost(_ context.Context, hostname string) ([]n
 	}
 	ip := net.ParseIP("127.0.0.1")
 	return []net.IP{ip}, nil
+}
+
+// LookupAAAA is a mock
+func (mock *MockDNSResolver) LookupAAAA(_ context.Context, hostname string) ([]net.IP, error) {
+	return nil, nil
 }
 
 // LookupCAA is a mock

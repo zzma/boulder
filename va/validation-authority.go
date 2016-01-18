@@ -91,7 +91,7 @@ type verificationRequestEvent struct {
 // net/http, except we only send A queries and accept IPv4 addresses.
 // TODO(#593): Add IPv6 support
 func (va ValidationAuthorityImpl) getAddr(ctx context.Context, hostname string) (net.IP, []net.IP, *probs.ProblemDetails) {
-	addrs, err := va.DNSResolver.LookupHost(ctx, hostname)
+	addrs, err := va.DNSResolver.LookupA(ctx, hostname)
 	if err != nil {
 		va.log.Debug(fmt.Sprintf("%s DNS failure: %s", hostname, err))
 		problem := bdns.ProblemDetailsFromDNSError(err)

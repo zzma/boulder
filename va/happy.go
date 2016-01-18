@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/letsencrypt/boulder/bdns"
 )
 
@@ -27,24 +28,26 @@ func dialAddr(addr *net.IP, port int, timeout time.Duration, cancel chan struct{
 	}
 }
 
-// DualStackLookup performs a Happy-Eyeballs (ish) attempt to connect to a host
+// DualStackDial performs a Happy-Eyeballs (ish) attempt to connect to a host
 // over both IPv4 and IPv6. Since this type of lookup is only used for resolution
 // during validation it also returns all resolved addresses for the host and the
 // specific IP address that the returned net.Conn connected to
-func DualStackLookup(hostname string, port int, timeout time.Duration, resolver bdns.DNSResolver) (*net.Conn, net.IP, []net.IP, error) {
+func DualStackDial(hostname string, port int, timeout time.Duration, resolver bdns.DNSResolver) (*net.Conn, net.IP, []net.IP, error) {
 	// Lookup A/AAAA records concurrently
 	wg := new(sync.WaitGroup)
 	allAddrs := make(chan []net.IP, 2)
 	errors := make(chan error, 2)
-	lookups := []func(string) ([]net.IP, error){
+	lookups := []func(context.Context, string) ([]net.IP, error){
 		resolver.LookupA,
 		resolver.LookupAAAA,
 	}
+	// TODO(#1292): add a proper deadline here
+	ctx := context.TODO()
 	for _, lookuper := range lookups {
 		wg.Add(1)
-		go func(l func(string) ([]net.IP, error)) {
+		go func(l func(context.Context, string) ([]net.IP, error)) {
 			defer wg.Done()
-			addrs, err := l(hostname)
+			addrs, err := l(ctx, hostname)
 			if err != nil {
 				errors <- err
 				return
