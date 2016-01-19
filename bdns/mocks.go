@@ -69,7 +69,8 @@ func (mock *MockDNSResolver) LookupA(_ context.Context, hostname string) ([]net.
 
 // LookupAAAA is a mock
 func (mock *MockDNSResolver) LookupAAAA(_ context.Context, hostname string) ([]net.IP, error) {
-	return nil, nil
+	ip := net.ParseIP("::1")
+	return []net.IP{ip}, nil
 }
 
 // LookupCAA is a mock
