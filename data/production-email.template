@@ -1,8 +1,11 @@
 Hello,
 
-Your certificate (or certificates) for the names listed below will expire in
-{{.DaysToExpiration}} days (on {{.ExpirationDate}}). Please make sure to renew
-your certificate before then, or visitors to your website will encounter errors.
+A certificate (or certificates) you issued listed below will expire in
+{{.DaysToExpiration}} days (on {{.ExpirationDate}}). If you've already renewed
+your certificate or certificates, you may ignore this message. Otherwise, please
+make sure to renew your certificate before then, or visitors to your website
+will encounter errors. Renewal instructions can be found at
+https://letsencrypt.org/howitworks/#renewing-a-certificate.
 
 {{.DNSNames}}
 
