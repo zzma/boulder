@@ -283,8 +283,10 @@ if [[ "$RUN" =~ "godep-restore" ]] ; then
   start_context "godep-restore"
   run_and_comment godep restore
   # Change to the right path, regardless of whether we are building on a fork.
-  run_and_comment mv "${TRAVIS_BUILD_DIR}" "${GOPATH}/src/github.com/letsencrypt/boulder"
-  run_and_comment cd "${GOPATH}/src/github.com/letsencrypt/boulder"
+  # TODO: Run godep save and do a diff, to ensure that the version we got from
+  # `godep restore` matched what was in the remote repo. We can't currently do
+  # this because it breaks on forks (the import paths get rewritten to the
+  # fork's path).
   run_and_comment godep save -r ./...
   run_and_comment git diff --exit-code
   end_context #godep-restore
