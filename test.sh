@@ -283,12 +283,17 @@ if [[ "$RUN" =~ "godep-restore" ]] ; then
   start_context "godep-restore"
   run_and_comment godep restore
   # Change to the right path, regardless of whether we are building on a fork.
-  # TODO: Run godep save and do a diff, to ensure that the version we got from
-  # `godep restore` matched what was in the remote repo. We can't currently do
-  # this because it breaks on forks (the import paths get rewritten to the
-  # fork's path).
-  run_and_comment godep save -r ./...
-  run_and_comment git diff --exit-code
+  # Run godep save and do a diff, to ensure that the version we got from
+  # `godep restore` matched what was in the remote repo. We only do this on
+  # builds of the main fork (not PRs from external contributors), because godep
+  # rewrites import paths to the path of the fork we're building from, which
+  # creates spurious diffs if we're not building from the main fork.
+  # Once we switch to Go 1.6's imports and don't need rewriting anymore, we can
+  # do this for all builds.
+  if [[ "${TRAVIS_REPO_SLUG}" == "letsencrypt/boulder" ]] ; then
+    run_and_comment godep save -r ./...
+    run_and_comment git diff --exit-code
+  fi
   end_context #godep-restore
 fi
 
