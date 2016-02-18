@@ -449,7 +449,7 @@ func (wfe *WebFrontEndImpl) sendError(response http.ResponseWriter, logEvent *re
 	// auditable events.
 	if prob.Type == probs.ServerInternalProblem {
 		// AUDIT[ Error Conditions ] 9cc4d537-8534-4970-8665-4b382abe82f3
-		wfe.log.Audit(fmt.Sprintf("Internal error - %s - %s", prob.Detail, ierr))
+		wfe.log.AuditErr(fmt.Sprintf("Internal error - %s - %s", prob.Detail, ierr))
 	}
 
 	problemDoc, err := json.Marshal(prob)
