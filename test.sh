@@ -5,6 +5,9 @@ if type realpath >/dev/null 2>&1 ; then
   cd $(realpath $(dirname $0))
 fi
 
+echo "HEY OVER HERE"
+openssl version
+
 # The list of segments to run. To run only some of these segments, pre-set the
 # RUN variable with the ones you want (see .travis.yml for an example).
 # Order doesn't matter. Note: godep-restore is specifically left out of the
