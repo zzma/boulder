@@ -62,13 +62,14 @@ func main() {
 		log.Fatalf("dbping: %s", err)
 	}
 
-	row := db.QueryRow("SELECT jwk FROM registrations where id = ?", *regid)
+	row := db.QueryRow("SELECT jwk_sha256, jwk FROM registrations where id = ?", *regid)
 
-	var oldkeyString string
-	err = row.Scan(&oldkeyString)
+	var oldkeyString, oldkeyHash string
+	err = row.Scan(&oldkeyHash, &oldkeyString)
 	if err != nil {
 		log.Fatalf("reading old key: %s", err)
 	}
+	log.Printf("old: jwk_sha256 = '%s', jwk = '%s'", oldkeyHash, oldkeyString)
 
 	var oldkey jose.JsonWebKey
 	err = json.Unmarshal([]byte(oldkeyString), &oldkey)
@@ -106,5 +107,9 @@ func main() {
 		log.Fatalf("digest: %s", err)
 	}
 
-	db.Exec("UPDATE registrations SET jwk = ?, jwk_sha256 = ? WHERE id = ?", newkeyBytes, sha, *regid)
+	_, err = db.Exec("UPDATE registrations SET jwk = ?, jwk_sha256 = ? WHERE id = ?", newkeyBytes, sha, *regid)
+	if err != nil {
+		log.Fatalf("update: %s", err)
+	}
+	log.Printf("Updated to new key successfully")
 }
