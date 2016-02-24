@@ -2,28 +2,24 @@ package main
 
 import (
 	"crypto"
-	"crypto/x509"
 	"crypto/sha256"
+	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"flag"
-  "fmt"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 
-	"database/sql"
 	_ "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/go-sql-driver/mysql"
-	"github.com/square/go-jose"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/go-jose"
 )
 
 var file = flag.String("file", "", "file to read key rotation request from")
-var keyfile = flag.String("keyfile", "", "file to read old jwk from")
-var dburi = flag.String("dburi", "", "url of db to connect to")
+var dbconnectfile = flag.String("dbconnectfile", "", "path to file containing dbconnect string")
 var regid = flag.Int("regid", 0, "id of registration to modify")
-
-type rotateRequest struct {
-	Key *jose.JsonWebKey
-}
 
 // KeyDigest produces a padded, standard Base64-encoded SHA256 digest of a
 // provided public key.
@@ -53,7 +49,12 @@ func main() {
 		log.Fatal("id must be set")
 	}
 
-	db, err := sql.Open("mysql", *dburi)
+	dbconnect, err := ioutil.ReadFile(*dbconnectfile)
+	if err != nil {
+		log.Fatalf("read dbconnect string: %s", err)
+	}
+
+	db, err := sql.Open("mysql", strings.TrimSpace(string(dbconnect)))
 	if err != nil {
 		log.Fatalf("dbconnect: %s", err)
 	}
@@ -87,18 +88,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("verify: %s", err)
 	}
-	var rr rotateRequest
-	err = json.Unmarshal(payload, &rr)
+	var rotateRequest struct {
+		Key *jose.JsonWebKey
+	}
+	err = json.Unmarshal(payload, &rotateRequest)
 	if err != nil {
 		log.Fatalf("unmarshal payload: %s", err)
 	}
-	newkeyBytes, err := json.Marshal(rr.Key)
+	newkeyBytes, err := json.Marshal(rotateRequest.Key)
 	if err != nil {
 		log.Fatalf("marshal newkey: %s", err)
 	}
 	log.Printf("Verified new key: %s", string(newkeyBytes))
 
-	sha, err := KeyDigest(rr.Key)
+	sha, err := KeyDigest(rotateRequest.Key)
 	if err != nil {
 		log.Fatalf("digest: %s", err)
 	}
