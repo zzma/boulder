@@ -160,6 +160,7 @@ type testCtx struct {
 	caConfig  cmd.CAConfig
 	reg       core.Registration
 	pa        core.PolicyAuthority
+	issuers   []Issuer
 	keyPolicy core.KeyPolicy
 	fc        clock.FakeClock
 	stats     *mocks.Statter
@@ -215,7 +216,7 @@ func setup(t *testing.T) *testCtx {
 		ECDSAProfile: ecdsaProfileName,
 		SerialPrefix: 17,
 		Expiry:       "8760h",
-		LifespanOCSP: "45m",
+		LifespanOCSP: cmd.ConfigDuration{45 * time.Minute},
 		MaxNames:     2,
 		DoNotForceCN: true,
 		CFSSL: cfsslConfig.Config{
@@ -281,6 +282,8 @@ func setup(t *testing.T) *testCtx {
 
 	stats := mocks.NewStatter()
 
+	issuers := []Issuer{{caKey, caCert}}
+
 	keyPolicy := core.KeyPolicy{
 		AllowRSA:           true,
 		AllowECDSANISTP256: true,
@@ -292,6 +295,7 @@ func setup(t *testing.T) *testCtx {
 		caConfig,
 		reg,
 		pa,
+		issuers,
 		keyPolicy,
 		fc,
 		&stats,
@@ -304,14 +308,24 @@ func TestFailNoSerial(t *testing.T) {
 	defer ctx.cleanUp()
 
 	ctx.caConfig.SerialPrefix = 0
-	_, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	_, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertError(t, err, "CA should have failed with no SerialPrefix")
 }
 
 func TestIssueCertificate(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertNotError(t, err, "Failed to create CA")
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
@@ -391,7 +405,12 @@ func TestIssueCertificate(t *testing.T) {
 func TestNoHostnames(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertNotError(t, err, "Failed to create CA")
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
@@ -407,7 +426,12 @@ func TestNoHostnames(t *testing.T) {
 func TestRejectTooManyNames(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertNotError(t, err, "Failed to create CA")
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
@@ -424,7 +448,12 @@ func TestRejectTooManyNames(t *testing.T) {
 func TestDeduplication(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertNotError(t, err, "Failed to create CA")
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
@@ -447,17 +476,25 @@ func TestDeduplication(t *testing.T) {
 func TestRejectValidityTooLong(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertNotError(t, err, "Failed to create CA")
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
 
+	// This time is a few minutes before the notAfter in testdata/ca_cert.pem
+	future, err := time.Parse(time.RFC822, "10 Feb 25 00:30 GMT")
+	test.AssertNotError(t, err, "Failed to parse time")
+	ctx.fc.Set(future)
 	// Test that the CA rejects CSRs that would expire after the intermediate cert
 	csr, _ := x509.ParseCertificateRequest(NoCNCSR)
-	ca.notAfter = ctx.fc.Now()
 	_, err = ca.IssueCertificate(*csr, 1)
-	test.AssertEquals(t, err.Error(), "Cannot issue a certificate that expires after the intermediate certificate.")
+	test.AssertError(t, err, "Cannot issue a certificate that expires after the intermediate certificate")
 	_, ok := err.(core.InternalServerError)
 	test.Assert(t, ok, "Incorrect error type returned")
 }
@@ -465,7 +502,12 @@ func TestRejectValidityTooLong(t *testing.T) {
 func TestShortKey(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
@@ -481,7 +523,12 @@ func TestShortKey(t *testing.T) {
 func TestAllowNoCN(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	test.AssertNotError(t, err, "Couldn't create new CA")
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
@@ -517,7 +564,12 @@ func TestAllowNoCN(t *testing.T) {
 func TestLongCommonName(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
@@ -532,7 +584,12 @@ func TestLongCommonName(t *testing.T) {
 func TestRejectBadAlgorithm(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
@@ -549,7 +606,12 @@ func TestCapitalizedLetters(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
 	ctx.caConfig.MaxNames = 3
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
@@ -571,7 +633,12 @@ func TestWrongSignature(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
 	ctx.caConfig.MaxNames = 3
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
@@ -589,7 +656,12 @@ func TestProfileSelection(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
 	ctx.caConfig.MaxNames = 3
-	ca, _ := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, _ := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
@@ -634,7 +706,12 @@ func TestExtensions(t *testing.T) {
 	ctx := setup(t)
 	defer ctx.cleanUp()
 	ctx.caConfig.MaxNames = 3
-	ca, err := NewCertificateAuthorityImpl(ctx.caConfig, ctx.fc, ctx.stats, caCert, caKey, ctx.keyPolicy)
+	ca, err := NewCertificateAuthorityImpl(
+		ctx.caConfig,
+		ctx.fc,
+		ctx.stats,
+		ctx.issuers,
+		ctx.keyPolicy)
 	ca.Publisher = &mocks.Publisher{}
 	ca.PA = ctx.pa
 	ca.SA = ctx.sa
