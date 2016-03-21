@@ -30,14 +30,17 @@ const clientName = "CA"
 
 func loadIssuers(c cmd.Config) ([]ca.Issuer, error) {
 	if c.CA.Key != nil {
-		ic := *c.CA.Key
-		ic.CertFile = c.Common.IssuerCert
-		priv, cert, err := loadIssuer(ic)
-		return []ca.Issuer{{priv, cert}}, err
+		issuerConfig := *c.CA.Key
+		issuerConfig.CertFile = c.Common.IssuerCert
+		priv, cert, err := loadIssuer(issuerConfig)
+		return []ca.Issuer{{
+			Signer: priv,
+			Cert:   cert,
+		}}, err
 	}
 	var issuers []ca.Issuer
-	for _, ic := range c.CA.Issuers {
-		priv, cert, err := loadIssuer(ic)
+	for _, issuerConfig := range c.CA.Issuers {
+		priv, cert, err := loadIssuer(issuerConfig)
 		cmd.FailOnError(err, "Couldn't load private key")
 		issuers = append(issuers, ca.Issuer{
 			Signer: priv,
@@ -95,12 +98,8 @@ func loadSigner(issuerConfig cmd.IssuerConfig) (crypto.Signer, error) {
 		pkcs11Config.PrivateKeyLabel == "" {
 		return nil, fmt.Errorf("Missing a field in pkcs11Config %#v", pkcs11Config)
 	}
-	signer, err := pkcs11key.New(pkcs11Config.Module,
+	return pkcs11key.New(pkcs11Config.Module,
 		pkcs11Config.TokenLabel, pkcs11Config.PIN, pkcs11Config.PrivateKeyLabel)
-	if err != nil {
-		return nil, err
-	}
-	return signer, nil
 }
 
 func main() {

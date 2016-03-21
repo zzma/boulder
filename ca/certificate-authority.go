@@ -147,14 +147,18 @@ type Issuer struct {
 }
 
 // internalIssuer represents the fully initialized internal state for a single
-// isuser, including the cfssl signer and OCSP signer objects.
+// issuer, including the cfssl signer and OCSP signer objects.
 type internalIssuer struct {
 	cert       *x509.Certificate
 	eeSigner   signer.Signer
 	ocspSigner ocsp.Signer
 }
 
-func makeInternalIssuers(issuers []Issuer, policy *cfsslConfig.Signing, lifespanOCSP time.Duration) (map[string]*internalIssuer, error) {
+func makeInternalIssuers(
+	issuers []Issuer,
+	policy *cfsslConfig.Signing,
+	lifespanOCSP time.Duration,
+) (map[string]*internalIssuer, error) {
 	internalIssuers := make(map[string]*internalIssuer)
 	for _, iss := range issuers {
 		eeSigner, err := local.NewSigner(iss.Signer, iss.Cert, x509.SHA256WithRSA, policy)
@@ -179,7 +183,7 @@ func makeInternalIssuers(issuers []Issuer, policy *cfsslConfig.Signing, lifespan
 
 // NewCertificateAuthorityImpl creates a CA instance that can sign certificates
 // from a single issuer (the first first in the issers slice), and can sign OCSP
-// for any of issuer certificate provided.
+// for any of the issuer certificates provided.
 func NewCertificateAuthorityImpl(
 	config cmd.CAConfig,
 	clk clock.Clock,

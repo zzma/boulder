@@ -316,8 +316,11 @@ type CAConfig struct {
 	ECDSAProfile string
 	TestMode     bool
 	SerialPrefix int
-	Key          *IssuerConfig
-	Issuers      []IssuerConfig
+	// TODO(jsha): Remove Key field once we've migrated to Issuers
+	Key *IssuerConfig
+	// Issuers contains configuration information for each issuer cert and key
+	// this CA knows about. The first in the list is used as the default.
+	Issuers []IssuerConfig
 	// LifespanOCSP is how long OCSP responses are valid for; It should be longer
 	// than the minTimeToExpiry field for the OCSP Updater.
 	LifespanOCSP ConfigDuration
