@@ -34,15 +34,17 @@ func loadIssuers(c cmd.Config) ([]ca.Issuer, error) {
 		ic.CertFile = c.Common.IssuerCert
 		priv, cert, err := loadIssuer(ic)
 		return []ca.Issuer{{priv, cert}}, err
-	} else {
-		var issuers []ca.Issuer
-		for _, ic := range c.CA.Issuers {
-			priv, cert, err := loadIssuer(ic)
-			cmd.FailOnError(err, "Couldn't load private key")
-			issuers = append(issuers, ca.Issuer{priv, cert})
-		}
-		return issuers, nil
 	}
+	var issuers []ca.Issuer
+	for _, ic := range c.CA.Issuers {
+		priv, cert, err := loadIssuer(ic)
+		cmd.FailOnError(err, "Couldn't load private key")
+		issuers = append(issuers, ca.Issuer{
+			Signer: priv,
+			Cert:   cert,
+		})
+	}
+	return issuers, nil
 }
 
 func loadIssuer(issuerConfig cmd.IssuerConfig) (crypto.Signer, *x509.Certificate, error) {

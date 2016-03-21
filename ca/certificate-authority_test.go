@@ -216,7 +216,7 @@ func setup(t *testing.T) *testCtx {
 		ECDSAProfile: ecdsaProfileName,
 		SerialPrefix: 17,
 		Expiry:       "8760h",
-		LifespanOCSP: cmd.ConfigDuration{45 * time.Minute},
+		LifespanOCSP: cmd.ConfigDuration{Duration: 45 * time.Minute},
 		MaxNames:     2,
 		DoNotForceCN: true,
 		CFSSL: cfsslConfig.Config{
