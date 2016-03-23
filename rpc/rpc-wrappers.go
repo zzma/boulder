@@ -15,10 +15,14 @@ import (
 
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
 	jose "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/square/go-jose"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/google.golang.org/grpc"
+	"github.com/letsencrypt/boulder/Godeps/_workspace/src/google.golang.org/grpc/codes"
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"
 	"github.com/letsencrypt/boulder/probs"
+	"github.com/letsencrypt/boulder/rpc/pb"
 )
 
 // This file defines RPC wrappers around the ${ROLE}Impl classes,
@@ -553,6 +557,44 @@ func (rac RegistrationAuthorityClient) OnValidationUpdate(authz core.Authorizati
 
 	_, err = rac.rpc.DispatchSync(MethodOnValidationUpdate, data)
 	return
+}
+
+type ValidationAuthorityServer struct {
+	impl core.ValidationAuthority
+}
+
+var ErrMissingParameters = grpc.Errorf(codes.FailedPrecondition, "required RPC parameter was missing")
+
+func (s *ValidationAuthorityServer) PerformValidation(ctx context.Context, in *pb.PerformValidationRequest) (*pb.ValidationRecords, error) {
+	domain := in.Domain
+	stripChallenge := in.Challenge
+	stripAuthz := in.Authz
+	if domain == "" || stripChallenge == nil || stripAuthz == nil {
+		return nil, ErrMissingParameters
+	}
+	stripKeyAuth := stripChallenge.KeyAuthorization
+	if stripKeyAuth == nil {
+		return nil, ErrMissingParameters
+	}
+	var jwk = new(jose.JsonWebKey)
+	err := jwk.UnmarshalJSON([]byte(stripChallenge.AccountKey))
+	if err != nil {
+		return nil, err
+	}
+	challenge := core.Challenge{
+		ID:    stripChallenge.Id,
+		Type:  stripChallenge.Type,
+		Token: stripChallenge.Token,
+		KeyAuthorization: &core.KeyAuthorization{
+			Token:      stripKeyAuth.Token,
+			Thumbprint: stripKeyAuth.Thumbprint,
+		},
+		AccountKey: jwk,
+	}
+	authz := core.Authorization{}
+	records, probs := s.impl.PerformValidation(domain, challenge, authz)
+	_ = records // TODO
+	return nil, probs
 }
 
 // NewValidationAuthorityServer constructs an RPC server

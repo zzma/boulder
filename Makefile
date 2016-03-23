@@ -61,7 +61,8 @@ archive:
 
 # Rebuild all grpc files
 grpc:
-	protoc --go_out=. rpc/proto/*.proto
+	protoc --go_out=. rpc/pb/*.proto
+	sed -i 's@import proto "github.com/golang/protobuf/proto"@import proto "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/golang/protobuf/proto"@' rpc/pb/*.pb.go
 
 # Building an RPM requires `fpm` from https://github.com/jordansissel/fpm
 # which you can install with `gem install fpm`.
