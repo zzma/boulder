@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package pb;
 
+import "rpc/pb/core.proto";
+
 service VA {
 	rpc IsSafeDomain(Domain) returns (Valid) {}
 	rpc PerformValidation(PerformValidationRequest) returns (ValidationRecords) {}
