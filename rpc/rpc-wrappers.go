@@ -566,6 +566,9 @@ type ValidationAuthorityServer struct {
 var ErrMissingParameters = grpc.Errorf(codes.FailedPrecondition, "required RPC parameter was missing")
 
 func (s *ValidationAuthorityServer) PerformValidation(ctx context.Context, in *pb.PerformValidationRequest) (*pb.ValidationRecords, error) {
+	if in == nil {
+		return nil, ErrMissingParameters
+	}
 	domain := in.Domain
 	stripChallenge := in.Challenge
 	stripAuthz := in.Authz
@@ -591,10 +594,38 @@ func (s *ValidationAuthorityServer) PerformValidation(ctx context.Context, in *p
 		},
 		AccountKey: jwk,
 	}
-	authz := core.Authorization{}
+	authz := core.Authorization{
+		ID:             stripAuthz.Id,
+		RegistrationID: stripAuthz.RegID,
+	}
+
 	records, probs := s.impl.PerformValidation(domain, challenge, authz)
-	_ = records // TODO
-	return nil, probs
+
+	recordAry := make([]*pb.ValidationRecord, len(records))
+	for i, v := range records {
+		addrs := make([]string, len(v.AddressesResolved))
+		for i2, v2 := range v.AddressesResolved {
+			txt, err := v2.MarshalText()
+			if err != nil {
+				return nil, err
+			}
+			addrs[i2] = string(txt)
+		}
+		addr, err := v.AddressUsed.MarshalText()
+		if err != nil {
+			return nil, err
+		}
+		recordAry[i] = &pb.ValidationRecord{
+			Hostname:          v.Hostname,
+			Port:              v.Port,
+			AddressesResolved: addrs,
+			AddressUsed:       string(addr),
+			Authorities:       v.Authorities,
+			Url:               v.URL,
+		}
+	}
+	ret := &pb.ValidationRecords{recordAry}
+	return ret, probs
 }
 
 // NewValidationAuthorityServer constructs an RPC server

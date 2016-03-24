@@ -60,7 +60,7 @@ archive:
 		--prefix=boulder-$(COMMIT_ID)/ $(COMMIT_ID)
 
 # Rebuild all grpc files
-grpc:
+grpc: rpc/pb/*.proto
 	protoc --go_out=. rpc/pb/*.proto
 	sed -i 's@import proto "github.com/golang/protobuf/proto"@import proto "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/golang/protobuf/proto"@' rpc/pb/*.pb.go
 

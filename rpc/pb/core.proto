@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package pb;
+
+message KeyAuthorization {
+        string token = 1;
+        string thumbprint = 2;
+}
+
+message Domain {
+        string name = 1;
+}
+
+message Valid {
+        bool valid = 1;
+}
+
