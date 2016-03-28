@@ -60,11 +60,12 @@ archive:
 		--prefix=boulder-$(COMMIT_ID)/ $(COMMIT_ID)
 
 # Rebuild all grpc files
+GRPC_ALL_TARGETS=rpc/pb/*.pb.go
 grpc: rpc/pb/*.proto
 	protoc --go_out=plugins=grpc:. rpc/pb/*.proto
-	sed -i 's@import proto "github.com/golang/protobuf/proto"@import proto "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/golang/protobuf/proto"@' rpc/pb/*.pb.go
-	sed -i 's@import proto "golang.org/x/net/context"@import proto "github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"@' rpc/pb/*.pb.go
-	sed -i 's@import proto "google.golang.org/grpc"@import proto "github.com/letsencrypt/boulder/Godeps/_workspace/src/google.golang.org/grpc"@' rpc/pb/*.pb.go
+	sed -i 's@import proto "github.com/golang/protobuf/proto"@import proto "github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/golang/protobuf/proto"@' $(GRPC_ALL_TARGETS)
+	sed -i 's@context "golang.org/x/net/context"@context "github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"@' $(GRPC_ALL_TARGETS)
+	sed -i 's@grpc "google.golang.org/grpc"@grpc "github.com/letsencrypt/boulder/Godeps/_workspace/src/google.golang.org/grpc"@' $(GRPC_ALL_TARGETS)
 
 # Building an RPM requires `fpm` from https://github.com/jordansissel/fpm
 # which you can install with `gem install fpm`.
