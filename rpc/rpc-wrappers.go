@@ -234,6 +234,8 @@ func errorCondition(method string, err error, obj interface{}) {
 	log.AuditErr(fmt.Errorf("Error condition. method: %s err: %s data: %+v", method, err, obj))
 }
 
+var ErrMissingParameters = grpc.Errorf(codes.FailedPrecondition, "required RPC parameter was missing")
+
 // NewRegistrationAuthorityServer constructs an RPC server
 func NewRegistrationAuthorityServer(rpc Server, impl core.RegistrationAuthority) error {
 	log := blog.Get()
@@ -559,81 +561,99 @@ func (rac RegistrationAuthorityClient) OnValidationUpdate(authz core.Authorizati
 	return
 }
 
-type ValidationAuthorityServer struct {
+type ValidationAuthorityGRPCServer struct {
 	impl core.ValidationAuthority
 }
 
-var ErrMissingParameters = grpc.Errorf(codes.FailedPrecondition, "required RPC parameter was missing")
+func NewValidationAuthorityGRPCServer(s *grpc.Server, impl core.ValidationAuthority) {
+	rpcSrv := &ValidationAuthorityGRPCServer{impl}
+	pb.RegisterVAServer(s, rpcSrv)
+}
 
-func (s *ValidationAuthorityServer) PerformValidation(ctx context.Context, in *pb.PerformValidationRequest) (*pb.ValidationRecords, error) {
+func (s *ValidationAuthorityGRPCServer) PerformValidation(ctx context.Context, in *pb.PerformValidationRequest) (*pb.ValidationRecords, error) {
 	if in == nil {
 		return nil, ErrMissingParameters
 	}
 	domain := in.Domain
-	stripChallenge := in.Challenge
-	stripAuthz := in.Authz
-	if domain == "" || stripChallenge == nil || stripAuthz == nil {
+	if domain == "" {
 		return nil, ErrMissingParameters
 	}
-	stripKeyAuth := stripChallenge.KeyAuthorization
-	if stripKeyAuth == nil {
-		return nil, ErrMissingParameters
-	}
-	var jwk = new(jose.JsonWebKey)
-	err := jwk.UnmarshalJSON([]byte(stripChallenge.AccountKey))
+	challenge, err := unmarshalVAChallenge(in.Challenge)
 	if err != nil {
 		return nil, err
 	}
-	challenge := core.Challenge{
-		ID:    stripChallenge.Id,
-		Type:  stripChallenge.Type,
-		Token: stripChallenge.Token,
-		KeyAuthorization: &core.KeyAuthorization{
-			Token:      stripKeyAuth.Token,
-			Thumbprint: stripKeyAuth.Thumbprint,
-		},
-		AccountKey: jwk,
-	}
-	authz := core.Authorization{
-		ID:             stripAuthz.Id,
-		RegistrationID: stripAuthz.RegID,
+	authz, err := unmarshalAuthzMeta(in.Authz)
+	if err != nil {
+		return nil, err
 	}
 
-	records, probs := s.impl.PerformValidation(domain, challenge, authz)
-
-	recordAry := make([]*pb.ValidationRecord, len(records))
-	for i, v := range records {
-		addrs := make([]string, len(v.AddressesResolved))
-		for i2, v2 := range v.AddressesResolved {
-			txt, err := v2.MarshalText()
-			if err != nil {
-				return nil, err
-			}
-			addrs[i2] = string(txt)
-		}
-		addr, err := v.AddressUsed.MarshalText()
-		if err != nil {
-			return nil, err
-		}
-		recordAry[i] = &pb.ValidationRecord{
-			Hostname:          v.Hostname,
-			Port:              v.Port,
-			AddressesResolved: addrs,
-			AddressUsed:       string(addr),
-			Authorities:       v.Authorities,
-			Url:               v.URL,
-		}
+	records, err := s.impl.PerformValidation(domain, challenge, authz)
+	prob, ok := err.(*probs.ProblemDetails)
+	if !ok {
+		return nil, err
 	}
-	ret := &pb.ValidationRecords{recordAry}
-	return ret, probs
+	return marshalValidationRecords(records, prob)
 }
 
-func (s *ValidationAuthorityServer) IsSafeDomain(ctx context.Context, in *pb.Domain) (*pb.Valid, error) {
+func (s *ValidationAuthorityGRPCServer) IsSafeDomain(ctx context.Context, in *pb.Domain) (*pb.Valid, error) {
 	resp, err := s.impl.IsSafeDomain(&core.IsSafeDomainRequest{in.Name})
 	if err != nil {
 		return nil, err
 	}
 	return &pb.Valid{resp.IsSafe}, nil
+}
+
+type ValidationAuthorityGRPCClient struct {
+	gc pb.VAClient
+}
+
+func NewValidationAuthorityGRPCClient(cc *grpc.ClientConn) core.ValidationAuthority {
+	return &ValidationAuthorityGRPCClient{pb.NewVAClient(cc)}
+}
+
+var _ core.ValidationAuthority = ValidationAuthorityGRPCClient{}
+
+func (vac ValidationAuthorityGRPCClient) UpdateValidations(authz core.Authorization, index int) error {
+	panic("UpdateValidations should not be called on VA GRPC client")
+}
+
+// PerformValidation has the VA revalidate the specified challenge and returns
+// the updated Challenge object.
+func (vac ValidationAuthorityGRPCClient) PerformValidation(domain string, challenge core.Challenge, authz core.Authorization) ([]core.ValidationRecord, error) {
+	ctx := context.TODO()
+	authzMeta, err := marshalAuthzMeta(authz)
+	if err != nil {
+		return nil, err
+	}
+	vaChallenge, err := marshalVAChallenge(challenge)
+	if err != nil {
+		return nil, err
+	}
+	gRecords, err := vac.gc.PerformValidation(ctx, &pb.PerformValidationRequest{
+		Domain:    domain,
+		Authz:     authzMeta,
+		Challenge: vaChallenge,
+	})
+	if err != nil {
+		return nil, err
+	}
+	records, prob, err := unmarshalValidationRecords(gRecords)
+	if err != nil {
+		return nil, err
+	}
+
+	return records, prob
+}
+
+// IsSafeDomain returns true if the domain given is determined to be safe by an
+// third-party safe browsing API.
+func (vac ValidationAuthorityGRPCClient) IsSafeDomain(req *core.IsSafeDomainRequest) (*core.IsSafeDomainResponse, error) {
+	ctx := context.TODO()
+	valid, err := vac.gc.IsSafeDomain(ctx, &pb.Domain{req.Domain})
+	if err != nil {
+		return nil, err
+	}
+	return &core.IsSafeDomainResponse{(*valid).Valid}, nil
 }
 
 // NewValidationAuthorityServer constructs an RPC server

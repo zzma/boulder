@@ -15,3 +15,8 @@ message Valid {
         bool valid = 1;
 }
 
+message ProblemDetails {
+	string problemType = 1;
+	string detail = 2;
+	int32 httpStatus = 3;
+}

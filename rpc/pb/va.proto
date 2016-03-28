@@ -31,6 +31,7 @@ message AuthzMeta {
 
 message ValidationRecords {
 	repeated ValidationRecord records = 1;
+	ProblemDetails problems = 2;
 }
 
 message ValidationRecord {
