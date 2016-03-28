@@ -7,7 +7,6 @@ Package pb is a generated protocol buffer package.
 
 It is generated from these files:
 	rpc/pb/core.proto
-	rpc/pb/ra.proto
 	rpc/pb/va.proto
 
 It has these top-level messages:

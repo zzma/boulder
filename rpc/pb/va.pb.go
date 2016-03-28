@@ -27,7 +27,7 @@ type PerformValidationRequest struct {
 func (m *PerformValidationRequest) Reset()                    { *m = PerformValidationRequest{} }
 func (m *PerformValidationRequest) String() string            { return proto.CompactTextString(m) }
 func (*PerformValidationRequest) ProtoMessage()               {}
-func (*PerformValidationRequest) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{0} }
+func (*PerformValidationRequest) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{0} }
 
 func (m *PerformValidationRequest) GetChallenge() *VAChallenge {
 	if m != nil {
@@ -55,7 +55,7 @@ type VAChallenge struct {
 func (m *VAChallenge) Reset()                    { *m = VAChallenge{} }
 func (m *VAChallenge) String() string            { return proto.CompactTextString(m) }
 func (*VAChallenge) ProtoMessage()               {}
-func (*VAChallenge) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{1} }
+func (*VAChallenge) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{1} }
 
 func (m *VAChallenge) GetKeyAuthorization() *KeyAuthorization {
 	if m != nil {
@@ -72,7 +72,7 @@ type AuthzMeta struct {
 func (m *AuthzMeta) Reset()                    { *m = AuthzMeta{} }
 func (m *AuthzMeta) String() string            { return proto.CompactTextString(m) }
 func (*AuthzMeta) ProtoMessage()               {}
-func (*AuthzMeta) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{2} }
+func (*AuthzMeta) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{2} }
 
 type ValidationRecords struct {
 	Records []*ValidationRecord `protobuf:"bytes,1,rep,name=records" json:"records,omitempty"`
@@ -81,7 +81,7 @@ type ValidationRecords struct {
 func (m *ValidationRecords) Reset()                    { *m = ValidationRecords{} }
 func (m *ValidationRecords) String() string            { return proto.CompactTextString(m) }
 func (*ValidationRecords) ProtoMessage()               {}
-func (*ValidationRecords) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{3} }
+func (*ValidationRecords) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{3} }
 
 func (m *ValidationRecords) GetRecords() []*ValidationRecord {
 	if m != nil {
@@ -102,7 +102,7 @@ type ValidationRecord struct {
 func (m *ValidationRecord) Reset()                    { *m = ValidationRecord{} }
 func (m *ValidationRecord) String() string            { return proto.CompactTextString(m) }
 func (*ValidationRecord) ProtoMessage()               {}
-func (*ValidationRecord) Descriptor() ([]byte, []int) { return fileDescriptor2, []int{4} }
+func (*ValidationRecord) Descriptor() ([]byte, []int) { return fileDescriptor1, []int{4} }
 
 func init() {
 	proto.RegisterType((*PerformValidationRequest)(nil), "pb.PerformValidationRequest")
@@ -204,7 +204,7 @@ var _VA_serviceDesc = grpc.ServiceDesc{
 	Streams: []grpc.StreamDesc{},
 }
 
-var fileDescriptor2 = []byte{
+var fileDescriptor1 = []byte{
 	// 435 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x74, 0x52, 0xdb, 0x6e, 0xd3, 0x40,
 	0x14, 0xac, 0xe3, 0x26, 0xe0, 0x13, 0xa0, 0xc9, 0x51, 0x41, 0x56, 0x84, 0x50, 0x65, 0x1e, 0xe0,
