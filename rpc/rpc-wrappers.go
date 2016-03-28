@@ -628,6 +628,14 @@ func (s *ValidationAuthorityServer) PerformValidation(ctx context.Context, in *p
 	return ret, probs
 }
 
+func (s *ValidationAuthorityServer) IsSafeDomain(ctx context.Context, in *pb.Domain) (*pb.Valid, error) {
+	resp, err := s.impl.IsSafeDomain(&core.IsSafeDomainRequest{in.Name})
+	if err != nil {
+		return nil, err
+	}
+	return &pb.Valid{resp.IsSafe}, nil
+}
+
 // NewValidationAuthorityServer constructs an RPC server
 //
 // ValidationAuthorityClient / Server
