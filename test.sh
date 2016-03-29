@@ -296,10 +296,16 @@ if [[ "$RUN" =~ "godep-restore" ]] ; then
   if [[ "${TRAVIS_REPO_SLUG}" == "letsencrypt/boulder" ]] ; then
     run_and_comment godep save -r ./...
     run_and_comment git diff --exit-code Godeps/_workspace/
-    run_and_comment make grpc
-    run_and_comment git diff --exit-code rpc/pb/
   fi
   end_context #godep-restore
 fi
+
+if [[ "$RUN" =~ "make-grpc" ]] ; then
+  start_context "make-grpc"
+  run_and_comment make grpc
+  run_and_comment git diff --exit-code rpc/pb/
+  end_context #make-grpc
+fi
+
 
 exit ${FAILURE}

@@ -61,7 +61,7 @@ env:
     # production can be made in boulder-config-next.json.
     - RUN="integration" BOULDER_CONFIG="test/boulder-config-next.json"
     - RUN="unit"
-    - RUN="godep-restore"
+    - RUN="godep-restore make-grpc"
 
 script:
   - bash test.sh
