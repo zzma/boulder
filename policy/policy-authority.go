@@ -183,6 +183,28 @@ func (pa *AuthorityImpl) WillingToIssue(id core.AcmeIdentifier, regID int64) err
 	}
 	domain := id.Value
 
+	if err := ValidDNSName(domain); err != nil {
+		return err
+	}
+
+	// Names must end in an ICANN TLD, but they must not be equal to an ICANN TLD.
+	icannTLD, err := publicsuffix.ICANNTLD(domain)
+	if err != nil {
+		return errNonPublic
+	}
+	if icannTLD == domain {
+		return errICANNTLD
+	}
+
+	// Require no match against blacklist
+	if err := pa.checkHostLists(domain); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func ValidDNSName(domain string) error {
 	if domain == "" {
 		return errEmptyName
 	}
@@ -228,21 +250,6 @@ func (pa *AuthorityImpl) WillingToIssue(id core.AcmeIdentifier, regID int64) err
 			return errIDNNotSupported
 		}
 	}
-
-	// Names must end in an ICANN TLD, but they must not be equal to an ICANN TLD.
-	icannTLD, err := publicsuffix.ICANNTLD(domain)
-	if err != nil {
-		return errNonPublic
-	}
-	if icannTLD == domain {
-		return errICANNTLD
-	}
-
-	// Require no match against blacklist
-	if err := pa.checkHostLists(domain); err != nil {
-		return err
-	}
-
 	return nil
 }
 

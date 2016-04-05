@@ -22,6 +22,7 @@ import (
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/net/publicsuffix"
 	"github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/letsencrypt/boulder/metrics"
+	"github.com/letsencrypt/boulder/policy"
 	"github.com/letsencrypt/boulder/probs"
 
 	"github.com/letsencrypt/boulder/bdns"
@@ -103,6 +104,11 @@ const (
 	multipleAddressDetail  = "more than one e-mail address"
 )
 
+var errEmptyDNSResponse = &probs.ProblemDetails{
+	Type:   probs.InvalidEmailProblem,
+	Detail: emptyDNSResponseDetail,
+}
+
 func validateEmail(ctx context.Context, address string, resolver bdns.DNSResolver) (prob *probs.ProblemDetails) {
 	emails, err := mail.ParseAddressList(address)
 	if err != nil {
@@ -119,25 +125,47 @@ func validateEmail(ctx context.Context, address string, resolver bdns.DNSResolve
 	}
 	splitEmail := strings.SplitN(emails[0].Address, "@", -1)
 	domain := strings.ToLower(splitEmail[len(splitEmail)-1])
-	var resultMX []string
-	var resultA []net.IP
-	resultMX, err = resolver.LookupMX(ctx, domain)
-	if err == nil && len(resultMX) == 0 {
-		resultA, err = resolver.LookupHost(ctx, domain)
-		if err == nil && len(resultA) == 0 {
-			return &probs.ProblemDetails{
-				Type:   probs.InvalidEmailProblem,
-				Detail: emptyDNSResponseDetail,
-			}
+	if err := policy.ValidDNSName(domain); err != nil {
+		return &probs.ProblemDetails{
+			Type:   probs.InvalidEmailProblem,
+			Detail: err.Error(),
 		}
 	}
+	var resultMX []string
+	var resultA []net.IP
+	mxChan := make(chan error)
+	aChan := make(chan error)
+	go func() {
+		result, err := resolver.LookupMX(ctx, domain)
+		if err == nil && len(result) > 0 {
+			mxChan <- nil
+		} else if len(result) == 0 {
+			mxChan <- errEmptyDNSResponse
+		} else {
+			mxChan <- &probs.ProblemDetails{
+				Type:   probs.InvalidEmailProblem,
+				Detail: bdns.ProblemDetailsFromDNSError(err),
+			}
+		}
+	}()
+	go func() {
+		result, err := resolver.LookupA(ctx, domain)
+		if err == nil && len(result) > 0 {
+			aChan <- nil
+		} else if len(result) == 0 {
+			aChan <- errEmptyDNSResponse
+		} else {
+			aChan <- &probs.ProblemDetails{
+				Type:   probs.InvalidEmailProblem,
+				Detail: bdns.ProblemDetailsFromDNSError(err),
+			}
+		}
+	}()
+	err <- mxChan
 	if err != nil {
-		prob := bdns.ProblemDetailsFromDNSError(err)
-		prob.Type = probs.InvalidEmailProblem
-		return prob
+		err <- aChan
 	}
-
-	return nil
+	return err
 }
 
 type certificateRequestEvent struct {
