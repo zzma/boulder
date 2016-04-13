@@ -150,6 +150,7 @@ function run_unit_tests() {
     done
 
     find . -name "*.coverprofile" | xargs grep -hv '^mode: ' > coverprofile.txt
+    cat coverprofile.txt
 
     # We don't use the run function here because sometimes goveralls fails to
     # contact the server and exits with non-zero status, but we don't want to
