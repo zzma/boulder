@@ -149,7 +149,7 @@ function run_unit_tests() {
       go test -race -cover -coverprofile=${dir}.coverprofile ${path} || FAILURE=1
     done
 
-    find . -name "*.coverprofile" | xargs cat > all.coverprofile
+    find . -name "*.coverprofile" | xargs grep -v '^mode: ' > all.coverprofile
 
     # We don't use the run function here because sometimes goveralls fails to
     # contact the server and exits with non-zero status, but we don't want to
