@@ -272,7 +272,8 @@ func (dnsResolver *DNSResolverImpl) LookupTXT(ctx context.Context, hostname stri
 	return txt, authorities, err
 }
 
-func isPrivateV4(ip net.IP) bool {
+// XXX: Use iana_spar
+func isPrivate(ip net.IP) bool {
 	for _, net := range privateNetworks {
 		if net.Contains(ip) {
 			return true
@@ -287,24 +288,38 @@ func isPrivateV4(ip net.IP) bool {
 // the case of temporary network errors. It can return net package,
 // context.Canceled, and context.DeadlineExceeded errors.
 func (dnsResolver *DNSResolverImpl) LookupHost(ctx context.Context, hostname string) ([]net.IP, error) {
-	var addrs []net.IP
-	dnsType := dns.TypeA
-	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType, dnsResolver.aStats)
-	if err != nil {
-		return addrs, &dnsError{dnsType, hostname, err, -1}
-	}
-	if r.Rcode != dns.RcodeSuccess {
-		return nil, &dnsError{dnsType, hostname, nil, r.Rcode}
-	}
-
-	for _, answer := range r.Answer {
-		if answer.Header().Rrtype == dnsType {
-			if a, ok := answer.(*dns.A); ok && a.A.To4() != nil && (!isPrivateV4(a.A) || dnsResolver.allowRestrictedAddresses) {
-				addrs = append(addrs, a.A)
+	aChan <- make(chan net.IP)
+	aaaaChan <- make(chan net.IP)
+	for dnsType := range []uint16{dns.TypeA, dns.TypeAAAA} {
+		go func(dnsType) {
+			r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType, dnsResolver.aStats)
+			if err != nil {
+				return addrs, &dnsError{dnsType, hostname, err, -1}
 			}
-		}
+			if r.Rcode != dns.RcodeSuccess {
+				return nil, &dnsError{dnsType, hostname, nil, r.Rcode}
+			}
+
+			for _, answer := range r.Answer {
+				if answer.Header().Rrtype == dnsType {
+					if a, ok := answer.(*dns.A); ok && a.A.To4() != nil && (!isPrivate(a.A) || dnsResolver.allowRestrictedAddresses) {
+						aChan <- a.A
+					}
+					if aaaa, ok := answer.(*dns.AAAA); ok && (!isPrivate(a.AAAA) || dnsResolver.allowRestrictedAddresses) {
+						aChan <- aaaa.AAAA
+					}
+				}
+			}
+		}(dnsType)
 	}
 
+	var addrs []net.IP
+	for a := range aChan {
+		addrs = append(addrs, a)
+	}
+	for aaaa := range aaaaChan {
+		addrs = append(addrs, aaaa)
+	}
 	return addrs, nil
 }
 

@@ -59,10 +59,22 @@ func mockDNSQuery(w dns.ResponseWriter, r *dns.Msg) {
 				record.AAAA = net.ParseIP("::1")
 				appendAnswer(record)
 			}
+			if q.Name == "dualstack.letsencrypt.org." {
+				record := new(dns.AAAA)
+				record.Hdr = dns.RR_Header{Name: "dualstack.letsencrypt.org.", Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 0}
+				record.AAAA = net.ParseIP("::1")
+				appendAnswer(record)
+			}
 		case dns.TypeA:
 			if q.Name == "cps.letsencrypt.org." {
 				record := new(dns.A)
 				record.Hdr = dns.RR_Header{Name: "cps.letsencrypt.org.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
+				record.A = net.ParseIP("127.0.0.1")
+				appendAnswer(record)
+			}
+			if q.Name == "dualstack.letsencrypt.org." {
+				record := new(dns.A)
+				record.Hdr = dns.RR_Header{Name: "dualstack.letsencrypt.org.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 0}
 				record.A = net.ParseIP("127.0.0.1")
 				appendAnswer(record)
 			}
@@ -263,11 +275,20 @@ func TestDNSLookupHost(t *testing.T) {
 	test.AssertNotError(t, err, "Not an error to exist")
 	test.Assert(t, len(ip) == 1, "Should have IP")
 
-	// No IPv6
+	// IPv6 only
 	ip, err = obj.LookupHost(context.Background(), "v6.letsencrypt.org")
 	t.Logf("v6.letsencrypt.org - IP: %s, Err: %s", ip, err)
+	test.AssertNotError(t, err, "Should have IP")
+	test.Assert(t, len(ip) == 1, "Should have IP")
+	test.Assert(t, ip[0].Equal(net.ParseIP("::1"), "IP should be correct")
+
+	// IPv4 and IPv6
+	ip, err = obj.LookupHost(context.Background(), "dualstack.letsencrypt.org")
+	t.Logf("dualstack.letsencrypt.org - IP: %s, Err: %s", ip, err)
 	test.AssertNotError(t, err, "Not an error to exist")
-	test.Assert(t, len(ip) == 0, "Should not have IPs")
+	test.Assert(t, len(ip) == 2, "Should have multiple IPs")
+	test.Assert(t, ip[0].Equal(net.ParseIP("127.0.0.1"), "A should be correct")
+	test.Assert(t, ip[1].Equal(net.ParseIP("::1"), "AAAA should be correct")
 }
 
 func TestDNSNXDOMAIN(t *testing.T) {

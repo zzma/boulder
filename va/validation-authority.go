@@ -89,7 +89,6 @@ type verificationRequestEvent struct {
 // preferred address, the first net.IP in the addrs slice, and all addresses resolved.
 // This is the same choice made by the Go internal resolution library used by
 // net/http, except we only send A queries and accept IPv4 addresses.
-// TODO(#593): Add IPv6 support
 func (va ValidationAuthorityImpl) getAddr(ctx context.Context, hostname string) (net.IP, []net.IP, *probs.ProblemDetails) {
 	addrs, err := va.DNSResolver.LookupHost(ctx, hostname)
 	if err != nil {
