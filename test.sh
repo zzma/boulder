@@ -149,12 +149,12 @@ function run_unit_tests() {
       go test -race -cover -coverprofile=${dir}.coverprofile ${path} || FAILURE=1
     done
 
-    find . -name "*.coverprofile" | xargs grep -v '^mode: ' > all.coverprofile
+    find . -name "*.coverprofile" | xargs grep -v '^mode: ' > coverprofile.txt
 
     # We don't use the run function here because sometimes goveralls fails to
     # contact the server and exits with non-zero status, but we don't want to
     # treat that as a failure.
-    [ -e $GOBIN/goveralls ] && $GOBIN/goveralls -coverprofile=all.coverprofile -service=travis-ci
+    [ -e $GOBIN/goveralls ] && $GOBIN/goveralls -coverprofile=coverprofile.txt -service=travis-ci
   else
     # When running locally, we skip the -race flag for speedier test runs. We
     # also pass -p 1 to require the tests to run serially instead of in
