@@ -146,11 +146,11 @@ function run_unit_tests() {
     # Run each test by itself for Travis, so we can get coverage
     for path in ${TESTPATHS}; do
       dir=$(basename $path)
-      go test -race -cover -coverprofile=${dir}.coverprofile ${path} || FAILURE=1
+      go test -race -cover -mode=set -coverprofile=${dir}.coverprofile ${path} || FAILURE=1
     done
 
-    find . -name "*.coverprofile" | xargs grep -hv '^mode: ' > coverprofile.txt
-    cat coverprofile.txt
+    echo "mode: set" > coverprofile.txt
+    find . -name "*.coverprofile" | xargs grep -hv '^mode: ' >> coverprofile.txt
 
     # We don't use the run function here because sometimes goveralls fails to
     # contact the server and exits with non-zero status, but we don't want to
