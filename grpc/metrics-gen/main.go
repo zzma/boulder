@@ -97,22 +97,19 @@ func main() {
 				if !ok {
 					continue
 				}
-				fmt.Println(ts.Name)
 				inter := itf{Name: ts.Name.String()}
 				for _, m := range i.Methods.List {
 					if len(m.Names) == 0 {
 						continue
 					}
-					meth := method{Name: m.Names[0].String()}
-					fmt.Println("\t", m.Names)
 					f, ok := m.Type.(*ast.FuncType)
 					if !ok {
 						continue
 					}
 
+					meth := method{Name: m.Names[0].String()}
 					args, argDefs := []string{}, []string{}
 					if f.Params != nil && f.Params.NumFields() > 0 {
-						fmt.Println("\tin:")
 						for _, pi := range f.Params.List {
 							argName := ""
 							if len(pi.Names) > 0 {
@@ -121,7 +118,6 @@ func main() {
 								argName = fmt.Sprintf("arg%d", typeCounter)
 								typeCounter++
 							}
-							fmt.Println("\t\t", argName, unwrapExpr(pi.Type))
 							args = append(args, argName)
 							argDefs = append(argDefs, fmt.Sprintf("%s %s", argName, unwrapExpr(pi.Type)))
 						}
@@ -131,9 +127,7 @@ func main() {
 
 					returns := []string{}
 					if f.Results != nil && f.Results.NumFields() > 0 {
-						fmt.Println("\tout:")
 						for _, ri := range f.Results.List {
-							fmt.Println("\t\t", ri.Names, unwrapExpr(ri.Type))
 							returns = append(returns, unwrapExpr(ri.Type))
 						}
 					}
@@ -145,8 +139,7 @@ func main() {
 		}
 	}
 
-	fmt.Println(context)
-	t, err := template.ParseFiles("metrics/grpc-gen/metrics.tmpl")
+	t, err := template.ParseFiles("grpc/metrics-gen/metrics.tmpl")
 	if err != nil {
 		fmt.Println(err)
 		return
