@@ -1,0 +1,33 @@
+package {{.Package}}
+
+import (
+       "time"
+
+       "github.com/letsencrypt/boulder/metrics"
+       "github.com/cactus/go-statsd-client/statsd"
+)
+
+{{range .Interfaces}}
+type {{.Name}} struct {
+     inner {{.CoreType}}
+     stats metrics.Scope
+}
+
+func New{{.Name}}(inner {{.CoreType}}, statter statsd.Statter) {{.Name}} {
+     return {{.Name}}{
+            inner: inner,
+            stats: metrics.NewStatsdScope(statter, "{{.Name}}"),
+     }
+}
+
+{{range $i, $m := .Methods}}
+func (xxx {{.Name}}) {{$m.Name}}({{$m.ArgDefs}}) {{if $m.Results}}({{$m.Results}}) {{end}}{
+     // do the useful stuff
+     s := time.Now()
+     defer func() {
+           xxx.stats.TimingDuration("gRPC.Calls.Client.{{.Name}}.{{$m.Name}}.Latency", time.Since(s), 1.0)
+     }
+     return xxx.inner.{{$m.Name}}({{$m.Args}})
+}
+{{end}}
+{{end}}
