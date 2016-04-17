@@ -260,20 +260,24 @@ if [[ "$RUN" =~ "integration" ]] ; then
 
   source ${LETSENCRYPT_PATH}/venv/bin/activate
 
-  python test/integration-test.py --all
+  INTEGRATION_OUTPUT=$(mktemp -t boulderintegrationXXXX)
+  python test/integration-test.py --all 2>&1 > ${INTEGRATION_OUTPUT}
   case $? in
     0) # Success
       update_status --state success
       ;;
     1) # Python client failed
+      cat ${INTEGRATION_OUTPUT}
       update_status --state success --description "Python integration failed."
       FAILURE=1
       ;;
     2) # Node client failed
+      cat ${INTEGRATION_OUTPUT}
       update_status --state failure --description "NodeJS integration failed."
       FAILURE=1
       ;;
     *) # Error occurred
+      cat ${INTEGRATION_OUTPUT}
       update_status --state error --description "Unknown error occurred."
       FAILURE=1
       ;;
