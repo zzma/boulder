@@ -17,12 +17,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/cactus/go-statsd-client/statsd"
-	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/Godeps/_workspace/src/github.com/letsencrypt/net/publicsuffix"
-	"github.com/letsencrypt/boulder/Godeps/_workspace/src/golang.org/x/net/context"
+	"github.com/cactus/go-statsd-client/statsd"
+	"github.com/jmhodges/clock"
 	"github.com/letsencrypt/boulder/metrics"
 	"github.com/letsencrypt/boulder/probs"
+	"github.com/letsencrypt/net/publicsuffix"
+	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/bdns"
 	"github.com/letsencrypt/boulder/cmd"
@@ -792,7 +792,7 @@ func (ra *RegistrationAuthorityImpl) UpdateAuthorization(base core.Authorization
 
 	if !ra.useNewVARPC {
 		// TODO(#1167): remove
-		ra.VA.UpdateValidations(authz, challengeIndex)
+		_ = ra.VA.UpdateValidations(authz, challengeIndex)
 		ra.stats.Inc("RA.UpdatedPendingAuthorizations", 1, 1.0)
 	} else {
 		go func() {
@@ -819,7 +819,10 @@ func (ra *RegistrationAuthorityImpl) UpdateAuthorization(base core.Authorization
 			}
 			authz.Challenges[challengeIndex] = *challenge
 
-			ra.OnValidationUpdate(authz)
+			err = ra.OnValidationUpdate(authz)
+			if err != nil {
+				ra.log.Err(fmt.Sprintf("Could not record updated validation: err=[%s] regID=[%d]", err, authz.RegistrationID))
+			}
 		}()
 		ra.stats.Inc("RA.UpdatedPendingAuthorizations", 1, 1.0)
 	}
