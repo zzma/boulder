@@ -155,58 +155,47 @@ func (ssa *SQLStorageAuthority) GetRegistrationByKey(ctx context.Context, key jo
 }
 
 // GetAuthorization obtains an Authorization by ID
-func (ssa *SQLStorageAuthority) GetAuthorization(ctx context.Context, id string) (authz core.Authorization, err error) {
-	tx, err := ssa.dbMap.Begin()
+func (ssa *SQLStorageAuthority) GetAuthorization(ctx context.Context, id string) (core.Authorization, error) {
+	authObj, err := ssa.dbMap.Get(authzModel{}, id)
 	if err != nil {
-		return
+		return core.Authorization{}, err
 	}
-
-	authObj, err := tx.Get(pendingauthzModel{}, id)
-	if err != nil {
-		err = Rollback(tx, err)
-		return
-	}
+	var authz core.Authorization
 	if authObj != nil {
-		authD := *authObj.(*pendingauthzModel)
+		authD := *authObj.(*authzModel)
 		authz = authD.Authorization
 	} else {
-		authObj, err = tx.Get(authzModel{}, id)
+		authObj, err = ssa.dbMap.Get(pendingauthzModel{}, id)
 		if err != nil {
-			err = Rollback(tx, err)
-			return
+			return core.Authorization{}, err
 		}
 		if authObj == nil {
-			err = fmt.Errorf("No pendingAuthorization or authz with ID %s", id)
-			err = Rollback(tx, err)
-			return
+			return core.Authorization{}, core.NotFoundError("")
 		}
-		authD := authObj.(*authzModel)
+		authD := authObj.(*pendingauthzModel)
 		authz = authD.Authorization
 	}
 
 	var challObjs []challModel
-	_, err = tx.Select(
+	_, err = ssa.dbMap.Select(
 		&challObjs,
 		getChallengesQuery,
 		map[string]interface{}{"authID": authz.ID},
 	)
 	if err != nil {
-		err = Rollback(tx, err)
-		return
+		return core.Authorization{}, nil
 	}
 	var challs []core.Challenge
 	for _, c := range challObjs {
 		chall, err := modelToChallenge(&c)
 		if err != nil {
-			err = Rollback(tx, err)
 			return core.Authorization{}, err
 		}
 		challs = append(challs, chall)
 	}
 	authz.Challenges = challs
 
-	err = tx.Commit()
-	return
+	return authz, nil
 }
 
 // GetValidAuthorizations returns the latest authorization object for all

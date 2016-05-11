@@ -821,15 +821,16 @@ func (wfe *WebFrontEndImpl) Challenge(
 	logEvent.Extra["ChallengeID"] = challengeID
 
 	authz, err := wfe.SA.GetAuthorization(ctx, authorizationID)
-	if err != nil {
-		// TODO(#1198): handle db errors etc
-		notFound()
+	if _, ok := err.(core.NotFoundError); ok {
+		wfe.sendError(response, logEvent, probs.NotFound("Unable to find authorization"), err)
+		return
+	} else if err != nil {
+		wfe.sendError(response, logEvent, probs.ServerInternal("Problem getting authorization"), err)
 		return
 	}
 
 	// After expiring, challenges are inaccessible
 	if authz.Expires == nil || authz.Expires.Before(wfe.clk.Now()) {
-		logEvent.AddError("Authorization %v expired in the past (%v)", authz.ID, *authz.Expires)
 		wfe.sendError(response, logEvent, probs.NotFound("Expired authorization"), nil)
 		return
 	}
@@ -1062,10 +1063,11 @@ func (wfe *WebFrontEndImpl) Authorization(ctx context.Context, logEvent *request
 	// Requests to this handler should have a path that leads to a known authz
 	id := parseIDFromPath(request.URL.Path)
 	authz, err := wfe.SA.GetAuthorization(ctx, id)
-	if err != nil {
-		logEvent.AddError("No such authorization at id %s", id)
-		// TODO(#1199): handle db errors
+	if _, ok := err.(core.NotFoundError); ok {
 		wfe.sendError(response, logEvent, probs.NotFound("Unable to find authorization"), err)
+		return
+	} else if err != nil {
+		wfe.sendError(response, logEvent, probs.ServerInternal("Problem getting authorization"), err)
 		return
 	}
 	logEvent.Extra["AuthorizationID"] = authz.ID
@@ -1076,8 +1078,6 @@ func (wfe *WebFrontEndImpl) Authorization(ctx context.Context, logEvent *request
 
 	// After expiring, authorizations are inaccessible
 	if authz.Expires == nil || authz.Expires.Before(wfe.clk.Now()) {
-		msg := fmt.Sprintf("Authorization %v expired in the past (%v)", authz.ID, *authz.Expires)
-		logEvent.AddError(msg)
 		wfe.sendError(response, logEvent, probs.NotFound("Expired authorization"), nil)
 		return
 	}
