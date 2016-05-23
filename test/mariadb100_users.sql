@@ -9,22 +9,34 @@
 -- utilizes its own database.
 --
 
--- Create users for each component with the appropriate permissions. We want to
--- drop each user and recreate them, but if the user doesn't already exist, the
--- drop command will fail. So we grant the dummy `USAGE` privilege to make sure
--- the user exists and then drop the user.
+-- Create users using MariaDB 10.0 syntax
 
+-- Before setting up any privileges, we revoke existing ones to make sure we
+-- start from a clean slate.
+-- Note that dropping a non-existing user produces an error that aborts the
+-- script, so we first grant a harmless privilege to each user to ensure it
+-- exists.
 
--- These lines require MariaDB 10.1
-CREATE USER IF NOT EXISTS 'policy'@'localhost';
-CREATE USER IF NOT EXISTS 'sa'@'localhost';
-CREATE USER IF NOT EXISTS 'ocsp_resp'@'localhost';
-CREATE USER IF NOT EXISTS 'revoker'@'localhost';
-CREATE USER IF NOT EXISTS 'importer'@'localhost';
-CREATE USER IF NOT EXISTS 'mailer'@'localhost';
-CREATE USER IF NOT EXISTS 'cert_checker'@'localhost';
-CREATE USER IF NOT EXISTS 'ocsp_update'@'localhost';
-CREATE USER IF NOT EXISTS 'test_setup'@'localhost';
+GRANT USAGE ON *.* TO 'policy'@'localhost';
+DROP USER 'policy'@'localhost';
+GRANT USAGE ON *.* TO 'sa'@'localhost';
+DROP USER 'sa'@'localhost';
+GRANT USAGE ON *.* TO 'ocsp_resp'@'localhost';
+DROP USER 'ocsp_resp'@'localhost';
+GRANT USAGE ON *.* TO 'ocsp_update'@'localhost';
+DROP USER 'ocsp_update'@'localhost';
+GRANT USAGE ON *.* TO 'revoker'@'localhost';
+DROP USER 'revoker'@'localhost';
+GRANT USAGE ON *.* TO 'importer'@'localhost';
+DROP USER 'importer'@'localhost';
+GRANT USAGE ON *.* TO 'mailer'@'localhost';
+DROP USER 'mailer'@'localhost';
+GRANT USAGE ON *.* TO 'cert_checker'@'localhost';
+DROP USER 'cert_checker'@'localhost';
+GRANT USAGE ON *.* TO 'backfiller'@'localhost';
+DROP USER 'backfiller'@'localhost';
+GRANT USAGE ON *.* TO 'test_setup'@'localhost';
+DROP USER 'test_setup'@'localhost';
 
 -- Storage Authority
 GRANT SELECT,INSERT,UPDATE ON authz TO 'sa'@'localhost';
