@@ -3,8 +3,6 @@ boulder:
     dockerfile: Dockerfile
     environment:
         FAKE_DNS: 127.0.0.1
-    volumes:
-      - /tmp:/tmp
     net: bridge
     extra_hosts:
       - le.wtf:127.0.0.1
