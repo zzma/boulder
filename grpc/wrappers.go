@@ -30,10 +30,7 @@ func (s *ValidationAuthorityGRPCServer) PerformValidation(ctx context.Context, i
 		return nil, err
 	}
 	records, err := s.impl.PerformValidation(ctx, domain, challenge, authz)
-	prob, ok := err.(*probs.ProblemDetails)
-	if !ok {
-		return nil, err
-	}
+	prob := err.(*probs.ProblemDetails)
 	return validationResultToPB(records, prob)
 }
 
