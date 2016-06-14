@@ -374,7 +374,6 @@ func main() {
 			clk:           cmd.Clock(),
 		}
 
-		logger.Info("expiration-mailer: Starting")
 		err = m.findExpiringCertificates()
 		cmd.FailOnError(err, "expiration-mailer has failed")
 	}
