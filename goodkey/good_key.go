@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/letsencrypt/boulder/core"
+	"github.com/letsencrypt/boulder/goodkey/debian"
 )
 
 // To generate, run: primes 2 752 | tr '\n' ,
@@ -42,6 +43,7 @@ type KeyPolicy struct {
 	AllowECDSANISTP256 bool // Whether ECDSA NISTP256 keys should be allowed.
 	AllowECDSANISTP384 bool // Whether ECDSA NISTP384 keys should be allowed.
 	AllowECDSANISTP521 bool // Whether ECDSA NISTP521 keys should be allowed.
+	WeakKeys           *debian.Checker
 }
 
 // GoodKey returns true iff the key is acceptable for both TLS use and account
@@ -180,6 +182,12 @@ func (policy *KeyPolicy) goodCurve(c elliptic.Curve) (err error) {
 func (policy *KeyPolicy) goodKeyRSA(key rsa.PublicKey) (err error) {
 	if !policy.AllowRSA {
 		return core.MalformedRequestError("RSA keys are not allowed")
+	}
+	if policy.WeakKeys != nil {
+		err := policy.WeakKeys.Check(key.N.Bytes())
+		if err != nil {
+			return err
+		}
 	}
 
 	// Baseline Requirements Appendix A
