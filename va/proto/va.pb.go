@@ -167,7 +167,7 @@ var _ grpc.ClientConn
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the grpc package it is being compiled against.
-const _ = grpc.SupportPackageIsVersion2
+const _ = grpc.SupportPackageIsVersion1
 
 // Client API for VA service
 
@@ -213,40 +213,28 @@ func RegisterVAServer(s *grpc.Server, srv VAServer) {
 	s.RegisterService(&_VA_serviceDesc, srv)
 }
 
-func _VA_IsSafeDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _VA_IsSafeDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
 	in := new(IsSafeDomainRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(VAServer).IsSafeDomain(ctx, in)
+	out, err := srv.(VAServer).IsSafeDomain(ctx, in)
+	if err != nil {
+		return nil, err
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/va.VA/IsSafeDomain",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VAServer).IsSafeDomain(ctx, req.(*IsSafeDomainRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return out, nil
 }
 
-func _VA_PerformValidation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _VA_PerformValidation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
 	in := new(PerformValidationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(VAServer).PerformValidation(ctx, in)
+	out, err := srv.(VAServer).PerformValidation(ctx, in)
+	if err != nil {
+		return nil, err
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/va.VA/PerformValidation",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VAServer).PerformValidation(ctx, req.(*PerformValidationRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return out, nil
 }
 
 var _VA_serviceDesc = grpc.ServiceDesc{
