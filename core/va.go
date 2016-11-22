@@ -1,7 +1,7 @@
 package core
 
 import (
-	"golang.org/x/net/context"
+	"context"
 
 	vaPB "github.com/letsencrypt/boulder/va/proto"
 )

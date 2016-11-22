@@ -5,8 +5,8 @@ import (
 	"net"
 	"testing"
 
+	"context"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/probs"
 )

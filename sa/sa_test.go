@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/jmhodges/clock"
 	jose "gopkg.in/square/go-jose.v1"

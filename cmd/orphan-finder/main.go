@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"

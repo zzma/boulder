@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	cfsslConfig "github.com/cloudflare/cfssl/config"
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/golang/mock/gomock"
 	"github.com/jmhodges/clock"
 	"github.com/letsencrypt/boulder/metrics/mock_metrics"
 	"golang.org/x/crypto/ocsp"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"

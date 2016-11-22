@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strconv"
 
-	"golang.org/x/net/context"
+	"context"
 
 	gorp "gopkg.in/gorp.v1"
 

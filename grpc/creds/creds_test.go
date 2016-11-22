@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/test"

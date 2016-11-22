@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
+	"context"
 	"github.com/jmhodges/clock"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
 	grpcCodes "google.golang.org/grpc/codes"
 	"gopkg.in/yaml.v2"
 

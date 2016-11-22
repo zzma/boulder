@@ -13,9 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	"context"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
-	"golang.org/x/net/context/ctxhttp"
 
 	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"
@@ -119,7 +118,11 @@ func New(scope metrics.Scope, timeout time.Duration, maxFailures int, proxies []
 // multiple queries in parallel and only need a M of N quorum (we also expect
 // GPD to have quite good availability)
 func (cdr *CAADistributedResolver) queryCAA(ctx context.Context, url string, ic *http.Client) ([]*dns.CAA, error) {
-	apiResp, err := ctxhttp.Get(ctx, ic, url)
+	apiReq, err := http.NewRequest("GET", url)
+	if err != nil {
+		return nil, err
+	}
+	apiResp, err := client.Do(apiReq.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}

@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"context"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
 )
 
 // MockDNSResolver is a mock

@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"context"
 	"github.com/jmhodges/clock"
 	"github.com/weppos/publicsuffix-go/publicsuffix"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/bdns"
 	"github.com/letsencrypt/boulder/core"

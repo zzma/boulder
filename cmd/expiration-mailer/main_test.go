@@ -15,7 +15,7 @@ import (
 	"text/template"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/golang/mock/gomock"
 	"github.com/jmhodges/clock"

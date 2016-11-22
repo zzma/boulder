@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"context"
 	"github.com/jmhodges/clock"
 	"github.com/streadway/amqp"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"

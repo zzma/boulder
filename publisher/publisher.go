@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"context"
 	ct "github.com/google/certificate-transparency/go"
 	ctClient "github.com/google/certificate-transparency/go/client"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/core"
 	blog "github.com/letsencrypt/boulder/log"

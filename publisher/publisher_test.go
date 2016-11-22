@@ -21,10 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	"github.com/golang/mock/gomock"
 	ct "github.com/google/certificate-transparency/go"
 	"github.com/jmhodges/clock"
-	"golang.org/x/net/context"
 
 	blog "github.com/letsencrypt/boulder/log"
 	"github.com/letsencrypt/boulder/metrics"

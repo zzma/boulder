@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
+	"context"
 	"github.com/jmhodges/clock"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/bdns"
 	"github.com/letsencrypt/boulder/cdr"

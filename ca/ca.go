@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"context"
 	cfsslConfig "github.com/cloudflare/cfssl/config"
 	cferr "github.com/cloudflare/cfssl/errors"
 	"github.com/cloudflare/cfssl/ocsp"
@@ -24,7 +25,6 @@ import (
 	"github.com/cloudflare/cfssl/signer/local"
 	"github.com/jmhodges/clock"
 	"github.com/miekg/pkcs11"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"

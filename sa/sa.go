@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"context"
 	"github.com/jmhodges/clock"
-	"golang.org/x/net/context"
 	gorp "gopkg.in/gorp.v1"
 	jose "gopkg.in/square/go-jose.v1"
 

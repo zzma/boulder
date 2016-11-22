@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	"github.com/jmhodges/clock"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
 	"gopkg.in/square/go-jose.v1"
 
 	"github.com/letsencrypt/boulder/bdns"

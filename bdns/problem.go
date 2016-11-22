@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net"
 
+	"context"
 	"github.com/letsencrypt/boulder/probs"
 	"github.com/miekg/dns"
-	"golang.org/x/net/context"
 )
 
 // DNSError wraps a DNS error with various relevant information

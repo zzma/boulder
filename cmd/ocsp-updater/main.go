@@ -11,9 +11,9 @@ import (
 	"path"
 	"time"
 
+	"context"
 	"github.com/jmhodges/clock"
 	"golang.org/x/crypto/ocsp"
-	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/akamai"
 	"github.com/letsencrypt/boulder/cmd"

@@ -218,10 +218,6 @@
 			"Rev": "8058fc7b18f8794d9fc57eee98d64fe2c750e3f1"
 		},
 		{
-			"ImportPath": "golang.org/x/net/context/ctxhttp",
-			"Rev": "8058fc7b18f8794d9fc57eee98d64fe2c750e3f1"
-		},
-		{
 			"ImportPath": "golang.org/x/net/http2",
 			"Rev": "8058fc7b18f8794d9fc57eee98d64fe2c750e3f1"
 		},

@@ -6,8 +6,8 @@ import (
 
 	"github.com/letsencrypt/boulder/metrics"
 
+	"context"
 	"github.com/jmhodges/clock"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 )
 

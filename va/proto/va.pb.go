@@ -23,7 +23,7 @@ import math "math"
 import core "github.com/letsencrypt/boulder/core/proto"
 
 import (
-	context "golang.org/x/net/context"
+	context "context"
 	grpc "google.golang.org/grpc"
 )
 

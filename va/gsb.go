@@ -3,8 +3,8 @@
 package va
 
 import (
+	"context"
 	safebrowsing "github.com/letsencrypt/go-safe-browsing-api"
-	"golang.org/x/net/context"
 
 	bgrpc "github.com/letsencrypt/boulder/grpc"
 	vaPB "github.com/letsencrypt/boulder/va/proto"

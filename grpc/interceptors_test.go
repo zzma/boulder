@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"context"
 	"github.com/golang/mock/gomock"
 	"github.com/jmhodges/clock"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/letsencrypt/boulder/metrics"

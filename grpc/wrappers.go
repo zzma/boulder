@@ -11,7 +11,7 @@ import (
 	"errors"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 	ggrpc "google.golang.org/grpc"
 
 	caPB "github.com/letsencrypt/boulder/ca/proto"

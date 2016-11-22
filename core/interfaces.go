@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 	jose "gopkg.in/square/go-jose.v1"
 
 	"github.com/letsencrypt/boulder/revocation"

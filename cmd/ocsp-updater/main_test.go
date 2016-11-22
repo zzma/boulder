@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/jmhodges/clock"
 	"gopkg.in/gorp.v1"
