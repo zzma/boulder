@@ -18,6 +18,8 @@ import urllib2
 
 import startservers
 
+from chisel import auth_and_issue
+
 ISSUANCE_FAILED = 1
 REVOCATION_FAILED = 2
 MAILER_FAILED = 3
@@ -420,13 +422,11 @@ def main():
                 die(ExitStatus.NodeFailure)
             expected_ct_submissions += 1
 
-        if run_node_test("good-caa-reserved.com", challenge_types[0], expected_ct_submissions) != 0:
-            print("\nDidn't issue certificate for domain with good CAA records")
-            die(ExitStatus.NodeFailure)
+        auth_and_issue(["good-caa-reserved.com"])
+        verify_ct_submission(expected_ct_submissions, "http://localhost:4500/submissions")
 
-        if run_node_test("bad-caa-reserved.com", challenge_types[0], expected_ct_submissions) != ISSUANCE_FAILED:
-            print("\nIssued certificate for domain with bad CAA records")
-            die(ExitStatus.NodeFailure)
+        auth_and_issue(["bad-caa-reserved.com"])
+        verify_ct_submission(expected_ct_submissions, "http://localhost:4500/submissions")
 
         run_expired_authz_purger_test()
 
