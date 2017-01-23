@@ -172,8 +172,8 @@ def test_ct_submission():
         die(ExitStatus.CTFailure)
 
 def random_domain():
-   """Generate a random domain for testing (to avoid rate limiting)."""
-   return "rand.%x.xyz" % random.randrange(2**32)
+    """Generate a random domain for testing (to avoid rate limiting)."""
+    return "rand.%x.xyz" % random.randrange(2**32)
 
 def test_expiration_mailer():
     email_addr = "integration.%x@boulder.local" % random.randrange(2**16)
