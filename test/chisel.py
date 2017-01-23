@@ -10,7 +10,6 @@ $ python chisel.py foo.com bar.com
 import json
 import logging
 import os
-import signal
 import sys
 import threading
 import time
@@ -32,33 +31,28 @@ logger = logging.getLogger()
 logger.setLevel(int(os.getenv('LOGLEVEL', 20)))
 
 def make_client(email=None):
-  key = jose.JWKRSA(key=jose.ComparableRSAKey(
-    rsa.generate_private_key(65537, 2048, default_backend())))
+  """Build an acme.Client and register a new account with a random key."""
+  key = jose.JWKRSA(key=rsa.generate_private_key(65537, 2048, default_backend()))
 
   net = acme_client.ClientNetwork(key, verify_ssl=False,
                                   user_agent="Boulder integration tester")
 
-  # Build client and register account.
   client = acme_client.Client("http://localhost:4000/directory", key=key, net=net)
   account = client.register(messages.NewRegistration.from_data(email=email))
   client.agree_to_tos(account)
   return client
 
-# Authorize name
 def get_chall(client, domain):
+  """Ask the server for an authz, return the authz and an HTTP-01 challenge."""
   authz = client.request_domain_challenges(domain)
   for chall_body in authz.body.challenges:
     if isinstance(chall_body.chall, challenges.HTTP01):
       return authz, chall_body
   raise "No HTTP-01 challenge found"
 
-def http_01_answer(client, chall_body):
-  response, validation = chall_body.response_and_validation(client.key)
-  return standalone.HTTP01RequestHandler.HTTP01Resource(
-        chall=chall_body.chall, response=response,
-        validation=validation)
-
 def make_authzs(client, domains):
+  """Make authzs for each of the given domains. Return a list of authzs
+     and challenges."""
   authzs, challenges = [], []
   for d in domains:
       authz, chall_body = get_chall(client, d)
@@ -67,26 +61,8 @@ def make_authzs(client, domains):
       challenges.append(chall_body)
   return authzs, challenges
 
-def answer_chall(client, chall_body):
-  port = 5002
-  server = standalone.HTTP01Server(("", port), answers)
-  thread = threading.Thread(target=server.serve_forever)
-  thread.start()
-
-  # Loop until the HTTP01Server is ready.
-  while True:
-    try:
-      urllib2.urlopen("http://localhost:%d" % port)
-      break
-    except urllib2.URLError:
-      time.sleep(0.1)
-  client.answer_challenge(chall_body, response)
-  server.shutdown()
-  server.server_close()
-  thread.join()
-
 class ValidationError(Exception):
-  """Error validating"""
+  """An error that occurs during challenge validation."""
   def __init__(self, domain, problem_type, detail, *args, **kwargs):
     self.domain = domain
     self.problem_type = problem_type
@@ -96,6 +72,9 @@ class ValidationError(Exception):
     return "%s: %s: %s" % (self.domain, self.problem_type, self.detail)
 
 def issue(client, authzs, cert_output=None):
+  """Given a list of authzs that are being processed by the server,
+     wait for them to be ready, then request issuance of a cert with a random
+     key for the given domains."""
   domains = [authz.body.identifier.value for authz in authzs]
   pkey = OpenSSL.crypto.PKey()
   pkey.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
@@ -129,7 +108,17 @@ def issue(client, authzs, cert_output=None):
       f.write(pem)
   return certr
 
+def http_01_answer(client, chall_body):
+  """Return an HTTP01Resource to server in response to the given challenge."""
+  response, validation = chall_body.response_and_validation(client.key)
+  return standalone.HTTP01RequestHandler.HTTP01Resource(
+        chall=chall_body.chall, response=response,
+        validation=validation)
+
 def auth_and_issue(domains, email=None, cert_output=None, client=None):
+  """Make authzs for each of the given domains, set up a server to answer the
+     challenges in those authzs, tell the ACME server to validate the challenges,
+     then poll for the authzs to be ready and issue a cert."""
   if client == None:
       client = make_client(email)
   authzs, challenges = make_authzs(client, domains)
@@ -158,6 +147,9 @@ def auth_and_issue(domains, email=None, cert_output=None, client=None):
       thread.join()
 
 def expect_problem(problem_type, func):
+    """Run a function. If it raises a ValidationError or messages.Error that
+       contains the given problem_type, return. If it raises no error or the wrong
+       error, raise an exception."""
     ok = False
     try:
         func()
