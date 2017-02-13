@@ -28,9 +28,10 @@ from acme import messages
 from acme import standalone
 
 logger = logging.getLogger()
-logger.setLevel(int(os.getenv('LOGLEVEL', 20)))
+logger.setLevel(int(os.getenv('LOGLEVEL', 00)))
 
-DIRECTORY = os.getenv('DIRECTORY', 'http://localhost:4000/directory')
+DIRECTORY = os.getenv('DIRECTORY', 'http://localhost:14000/dir')
+#DIRECTORY = os.getenv('DIRECTORY', 'http://localhost:4000/directory')
 
 def make_client(email=None):
     """Build an acme.Client and register a new account with a random key."""
@@ -40,8 +41,12 @@ def make_client(email=None):
                                     user_agent="Boulder integration tester")
 
     client = acme_client.Client(DIRECTORY, key=key, net=net)
-    account = client.register(messages.NewRegistration.from_data(email=email))
-    client.agree_to_tos(account)
+    tos = client.directory.meta.terms_of_service
+    if tos is not None and "Do what thou wilt" in tos:
+        client.register(messages.NewRegistration.from_data(email=email,
+            terms_of_service_agreed=True))
+    else:
+        raise Exception("Unrecognized terms of service URL %s" % tos)
     return client
 
 def get_chall(client, domain):
@@ -73,13 +78,7 @@ class ValidationError(Exception):
     def __str__(self):
         return "%s: %s: %s" % (self.domain, self.problem_type, self.detail)
 
-def issue(client, authzs, cert_output=None):
-    """Given a list of authzs that are being processed by the server,
-       wait for them to be ready, then request issuance of a cert with a random
-       key for the given domains.
-
-       If cert_output is provided, write the cert as a PEM file to that path."""
-    domains = [authz.body.identifier.value for authz in authzs]
+def make_csr(domains):
     pkey = OpenSSL.crypto.PKey()
     pkey.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
     csr = OpenSSL.crypto.X509Req()
@@ -93,6 +92,15 @@ def issue(client, authzs, cert_output=None):
     csr.set_pubkey(pkey)
     csr.set_version(2)
     csr.sign(pkey, 'sha256')
+    return OpenSSL.crypto.dump_certificate_request(OpenSSL.crypto.FILETYPE_PEM, csr)
+
+def issue(client, authzs, cert_output=None):
+    """Given a list of authzs that are being processed by the server,
+       wait for them to be ready, then request issuance of a cert with a random
+       key for the given domains.
+
+       If cert_output is provided, write the cert as a PEM file to that path."""
+    csr = make_csr([authz.body.identifier.value for authz in authzs])
 
     cert_resource = None
     try:
@@ -129,6 +137,10 @@ def auth_and_issue(domains, email=None, cert_output=None, client=None):
        then poll for the authzs to be ready and issue a cert."""
     if client is None:
         client = make_client(email)
+
+    csr_pem = make_csr(domains)
+    client.new_order(csr_pem)
+    return
     authzs, challenges = make_authzs(client, domains)
     port = 5002
     answers = set([http_01_answer(client, c) for c in challenges])
