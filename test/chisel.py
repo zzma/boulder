@@ -27,8 +27,9 @@ from acme import jose
 from acme import messages
 from acme import standalone
 
+logging.basicConfig()
 logger = logging.getLogger()
-logger.setLevel(int(os.getenv('LOGLEVEL', 00)))
+logger.setLevel(int(os.getenv('LOGLEVEL', 0)))
 
 DIRECTORY = os.getenv('DIRECTORY', 'http://localhost:14000/dir')
 #DIRECTORY = os.getenv('DIRECTORY', 'http://localhost:4000/directory')
@@ -42,7 +43,7 @@ def make_client(email=None):
 
     client = acme_client.Client(DIRECTORY, key=key, net=net)
     tos = client.directory.meta.terms_of_service
-    if tos is not None and "Do what thou wilt" in tos:
+    if tos is not None and "Do%20what%20thou%20wilt" in tos:
         client.register(messages.NewRegistration.from_data(email=email,
             terms_of_service_agreed=True))
     else:
@@ -169,27 +170,6 @@ def do_http_challenges(client, authzs):
         server.server_close()
         thread.join()
     return cleanup
-
-def auth_and_issue(domains, chall_type="http-01", email=None, cert_output=None, client=None):
-    """Make authzs for each of the given domains, set up a server to answer the
-       challenges in those authzs, tell the ACME server to validate the challenges,
-       then poll for the authzs to be ready and issue a cert."""
-    if client is None:
-        client = make_client(email)
-    authzs = [client.request_domain_challenges(d) for d in domains]
-
-    if chall_type == "http-01":
-        cleanup = do_dns_challenges(client, authzs)
-    elif chall_type == "dns-01":
-        cleanup = do_http_challenges(client, authzs)
-    else:
-        raise Exception("invalid challenge type %s" % chall_type)
-
-    try:
-        cert_resource = issue(client, authzs, cert_output)
-        return cert_resource
-    finally:
-        cleanup()
 
 def expect_problem(problem_type, func):
     """Run a function. If it raises a ValidationError or messages.Error that
