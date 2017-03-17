@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import signal
 import threading
 import time
 import urllib2
@@ -119,7 +120,7 @@ def http_01_answer(client, chall_body):
           chall=chall_body.chall, response=response,
           validation=validation)
 
-def auth_and_issue(domains, email=None, cert_output=None, client=None):
+def auth_and_issue(domains, chall_type="http-01", email=None, cert_output=None, client=None):
     """Make authzs for each of the given domains, set up a server to answer the
        challenges in those authzs, tell the ACME server to validate the challenges,
        then poll for the authzs to be ready and issue a cert."""
@@ -127,9 +128,16 @@ def auth_and_issue(domains, email=None, cert_output=None, client=None):
         client = make_client(email)
 
     csr_pem = make_csr(domains)
-    client.new_order(csr_pem)
-    return
-    authzs, challenges = make_authzs(client, domains)
+    order = client.new_order(csr_pem)
+    authzs = order.authorizations
+
+    if chall_type == "http-01":
+        cleanup = do_http_challenges(client, authzs)
+    #elif chall_type == "dns-01":
+        #cleanup = do_dns_challenges(client, authzs)
+    else:
+        raise Exception("invalid challenge type %s" % chall_type)
+    cleanup()
 
 def do_dns_challenges(client, authzs):
     for a in authzs:
@@ -154,21 +162,28 @@ def do_http_challenges(client, authzs):
     thread = threading.Thread(target=server.serve_forever)
     thread.start()
 
-    # Loop until the HTTP01Server is ready.
-    while True:
-        try:
-            urllib2.urlopen("http://localhost:%d" % port)
-            break
-        except urllib2.URLError:
-            time.sleep(0.1)
-
-    for chall_body in challs:
-        client.answer_challenge(chall_body, chall_body.response(client.key))
-
+    # cleanup has to be called on any exception, or when validation is done.
+    # Otherwise the process won't terminate.
     def cleanup():
         server.shutdown()
         server.server_close()
         thread.join()
+
+    try:
+        # Loop until the HTTP01Server is ready.
+        while True:
+            try:
+                urllib2.urlopen("http://localhost:%d" % port)
+                break
+            except urllib2.URLError:
+                time.sleep(0.1)
+
+        for chall_body in challs:
+            client.answer_challenge(chall_body, chall_body.response(client.key))
+    except Exception:
+        cleanup()
+        raise
+
     return cleanup
 
 def expect_problem(problem_type, func):
@@ -192,6 +207,8 @@ def expect_problem(problem_type, func):
         raise Exception('Expected %s, got no error' % problem_type)
 
 if __name__ == "__main__":
+    # Die on SIGINT
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     domains = sys.argv[1:]
     if len(domains) == 0:
         print __doc__
