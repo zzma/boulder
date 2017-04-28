@@ -3,7 +3,6 @@ package bdns
 import (
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
@@ -161,11 +160,6 @@ type DNSResolverImpl struct {
 	maxTries              int
 	clk                   clock.Clock
 	stats                 metrics.Scope
-	txtStats              metrics.Scope
-	aStats                metrics.Scope
-	aaaaStats             metrics.Scope
-	caaStats              metrics.Scope
-	mxStats               metrics.Scope
 }
 
 var _ DNSResolver = &DNSResolverImpl{}
@@ -200,11 +194,6 @@ func NewDNSResolverImpl(
 		maxTries:                 maxTries,
 		clk:                      clk,
 		stats:                    stats,
-		txtStats:                 stats.NewScope("TXT"),
-		aStats:                   stats.NewScope("A"),
-		aaaaStats:                stats.NewScope("AAAA"),
-		caaStats:                 stats.NewScope("CAA"),
-		mxStats:                  stats.NewScope("MX"),
 	}
 }
 
@@ -217,11 +206,15 @@ func NewTestDNSResolverImpl(readTimeout time.Duration, servers []string, stats m
 	return resolver
 }
 
-// exchangeOne performs a single DNS exchange with a randomly chosen server
-// out of the server list, returning the response, time, and error (if any).
+// exchangeOne looks up a DNS resource record of the provided qtype, using the
+// provided number of retries and context deadline. It will round-robin through
+// the set of configured DNS servers, always starting with the first one. This
+// allows setting the first DNS server to be one that uses TCP, and only falling
+// back to UDP if the first DNS server times out (generally because an
+// authoritative server upstream does not support TCP).
 // This method sets the DNSSEC OK bit on the message to true before sending
 // it to the resolver in case validation isn't the resolvers default behaviour.
-func (dnsResolver *DNSResolverImpl) exchangeOne(ctx context.Context, hostname string, qtype uint16, msgStats metrics.Scope) (*dns.Msg, error) {
+func (dnsResolver *DNSResolverImpl) exchangeOne(ctx context.Context, hostname string, qtype uint16) (*dns.Msg, error) {
 	m := new(dns.Msg)
 	// Set question type
 	m.SetQuestion(dns.Fqdn(hostname), qtype)
@@ -234,18 +227,19 @@ func (dnsResolver *DNSResolverImpl) exchangeOne(ctx context.Context, hostname st
 
 	dnsResolver.stats.Inc("Rate", 1)
 
-	// Randomly pick a server
-	chosenServer := dnsResolver.servers[rand.Intn(len(dnsResolver.servers))]
-
 	client := dnsResolver.dnsClient
 
 	tries := 1
 	start := dnsResolver.clk.Now()
+	msgStats := dnsResolver.stats.NewScope(dns.TypeToString[qtype])
 	msgStats.Inc("Calls", 1)
 	defer func() {
 		msgStats.TimingDuration("Latency", dnsResolver.clk.Now().Sub(start))
 	}()
-	for {
+
+	for i := 0; ; i++ {
+		// Randomly pick a server
+		chosenServer := dnsResolver.servers[i%len(dnsResolver.servers)]
 		msgStats.Inc("Tries", 1)
 		ch := make(chan dnsResp, 1)
 
@@ -290,7 +284,7 @@ type dnsResp struct {
 func (dnsResolver *DNSResolverImpl) LookupTXT(ctx context.Context, hostname string) ([]string, []string, error) {
 	var txt []string
 	dnsType := dns.TypeTXT
-	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType, dnsResolver.txtStats)
+	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType)
 	if err != nil {
 		return nil, nil, &DNSError{dnsType, hostname, err, -1}
 	}
@@ -332,8 +326,8 @@ func isPrivateV6(ip net.IP) bool {
 	return false
 }
 
-func (dnsResolver *DNSResolverImpl) lookupIP(ctx context.Context, hostname string, ipType uint16, stats metrics.Scope) ([]dns.RR, error) {
-	resp, err := dnsResolver.exchangeOne(ctx, hostname, ipType, stats)
+func (dnsResolver *DNSResolverImpl) lookupIP(ctx context.Context, hostname string, ipType uint16) ([]dns.RR, error) {
+	resp, err := dnsResolver.exchangeOne(ctx, hostname, ipType)
 	if err != nil {
 		return nil, &DNSError{ipType, hostname, err, -1}
 	}
@@ -357,12 +351,12 @@ func (dnsResolver *DNSResolverImpl) LookupHost(ctx context.Context, hostname str
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		recordsA, errA = dnsResolver.lookupIP(ctx, hostname, dns.TypeA, dnsResolver.aStats)
+		recordsA, errA = dnsResolver.lookupIP(ctx, hostname, dns.TypeA)
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		recordsAAAA, errAAAA = dnsResolver.lookupIP(ctx, hostname, dns.TypeAAAA, dnsResolver.aaaaStats)
+		recordsAAAA, errAAAA = dnsResolver.lookupIP(ctx, hostname, dns.TypeAAAA)
 	}()
 	wg.Wait()
 
@@ -394,7 +388,7 @@ func (dnsResolver *DNSResolverImpl) LookupHost(ctx context.Context, hostname str
 // the provided hostname.
 func (dnsResolver *DNSResolverImpl) LookupCAA(ctx context.Context, hostname string) ([]*dns.CAA, error) {
 	dnsType := dns.TypeCAA
-	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType, dnsResolver.caaStats)
+	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType)
 	if err != nil {
 		return nil, &DNSError{dnsType, hostname, err, -1}
 	}
@@ -429,7 +423,7 @@ func (dnsResolver *DNSResolverImpl) LookupCAA(ctx context.Context, hostname stri
 // record target.
 func (dnsResolver *DNSResolverImpl) LookupMX(ctx context.Context, hostname string) ([]string, error) {
 	dnsType := dns.TypeMX
-	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType, dnsResolver.mxStats)
+	r, err := dnsResolver.exchangeOne(ctx, hostname, dnsType)
 	if err != nil {
 		return nil, &DNSError{dnsType, hostname, err, -1}
 	}
