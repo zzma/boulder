@@ -74,11 +74,6 @@ function die() {
 
 function run_unit_tests() {
   if [ "${TRAVIS}" == "true" ]; then
-    # Run the full suite of tests once with the -race flag. Since this isn't
-    # running tests individually we can't collect coverage information.
-    echo "running test suite with race detection"
-    go test -race -p 1 ${TESTPATHS}
-
     # Run each test by itself for Travis, so we can get coverage. We skip using
     # the -race flag here because we have already done a full test run with
     # -race above and it adds substantial overhead to run every test with -race
@@ -86,7 +81,7 @@ function run_unit_tests() {
     echo "running test suite with coverage enabled and without race detection"
     for path in ${TESTPATHS}; do
       dir=$(basename $path)
-      go test -cover -coverprofile=${dir}.coverprofile ${path} || FAILURE=1
+      go test -race -p 1 -cover -coverprofile=${dir}.coverprofile ${path} || FAILURE=1
     done
 
     # Gather all the coverprofiles
