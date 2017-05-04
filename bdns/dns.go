@@ -222,14 +222,10 @@ func NewTestDNSResolverImpl(readTimeout time.Duration, servers []string, stats m
 // allows setting the first DNS server to be one that uses TCP, and only falling
 // back to UDP if the first DNS server times out (generally because an
 // authoritative server upstream does not support TCP).
-// This method sets the DNSSEC OK bit on the message to true before sending
-// it to the resolver in case validation isn't the resolvers default behaviour.
 func (dnsResolver *DNSResolverImpl) exchangeOne(ctx context.Context, hostname string, qtype uint16, msgStats metrics.Scope) (*dns.Msg, error) {
 	m := new(dns.Msg)
 	// Set question type
 	m.SetQuestion(dns.Fqdn(hostname), qtype)
-	// Set DNSSEC OK bit for resolver
-	m.SetEdns0(4096, true)
 
 	if len(dnsResolver.servers) < 1 {
 		return nil, fmt.Errorf("Not configured with at least one DNS Server")
@@ -276,6 +272,9 @@ func (dnsResolver *DNSResolverImpl) exchangeOne(ctx context.Context, hostname st
 				}
 			} else {
 				msgStats.Inc("Successes", 1)
+				if r.m.AuthenticatedData {
+					msgStats.Inc("Authenticated", 1)
+				}
 			}
 			return r.m, r.err
 		}
