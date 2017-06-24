@@ -239,7 +239,7 @@ func TestHTTPBadPort(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("Server's down; expected refusal. Where did we connect?")
 	}
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 }
 
 func TestHTTP(t *testing.T) {
@@ -272,7 +272,7 @@ func TestHTTP(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("Should have found a 404 for the challenge.")
 	}
-	test.AssertEquals(t, prob.Type, probs.UnauthorizedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnauthorizedProblem)
 	test.AssertEquals(t, len(log.GetAllMatching(`\[AUDIT\] `)), 1)
 
 	log.Clear()
@@ -283,7 +283,7 @@ func TestHTTP(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("Should have found the wrong token value.")
 	}
-	test.AssertEquals(t, prob.Type, probs.UnauthorizedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnauthorizedProblem)
 	test.AssertEquals(t, len(log.GetAllMatching(`\[AUDIT\] `)), 1)
 
 	log.Clear()
@@ -308,13 +308,13 @@ func TestHTTP(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("IdentifierType IP shouldn't have worked.")
 	}
-	test.AssertEquals(t, prob.Type, probs.MalformedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.MalformedProblem)
 
 	_, prob = va.validateHTTP01(ctx, core.AcmeIdentifier{Type: core.IdentifierDNS, Value: "always.invalid"}, chall)
 	if prob == nil {
 		t.Fatalf("Domain name is invalid.")
 	}
-	test.AssertEquals(t, prob.Type, probs.UnknownHostProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnknownHostProblem)
 }
 
 func TestHTTPTimeout(t *testing.T) {
@@ -336,12 +336,12 @@ func TestHTTPTimeout(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("Connection should've timed out")
 	}
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 	expectMatch := regexp.MustCompile(
 		"Fetching http://localhost:\\d+/.well-known/acme-challenge/wait-long: Timeout")
-	if !expectMatch.MatchString(prob.Detail) {
+	if !expectMatch.MatchString(prob.(*probs.ProblemDetails).Detail) {
 		t.Errorf("Problem details incorrect. Got %q, expected to match %q",
-			prob.Detail, expectMatch)
+			prob.(*probs.ProblemDetails).Detail, expectMatch)
 	}
 }
 
@@ -403,7 +403,7 @@ func TestHTTPRedirectLookup(t *testing.T) {
 	setChallengeToken(&chall, pathRedirectToFailingURL)
 	_, prob = va.validateHTTP01(ctx, ident, chall)
 	test.AssertNotNil(t, prob, "Problem Details should not be nil")
-	test.AssertEquals(t, prob.Detail, "Fetching http://other.valid/500: Error getting validation data")
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Detail, "Fetching http://other.valid/500: Error getting validation data")
 }
 
 func TestHTTPRedirectLoop(t *testing.T) {
@@ -484,14 +484,14 @@ func TestTLSSNI01(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("IdentifierType IP shouldn't have worked.")
 	}
-	test.AssertEquals(t, prob.Type, probs.MalformedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.MalformedProblem)
 
 	log.Clear()
 	_, prob = va.validateTLSSNI01(ctx, core.AcmeIdentifier{Type: core.IdentifierDNS, Value: "always.invalid"}, chall)
 	if prob == nil {
 		t.Fatalf("Domain name was supposed to be invalid.")
 	}
-	test.AssertEquals(t, prob.Type, probs.UnknownHostProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnknownHostProblem)
 
 	// Need to create a new authorized keys object to get an unknown SNI (from the signature value)
 	chall.Token = core.NewToken()
@@ -504,7 +504,7 @@ func TestTLSSNI01(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("Validation should've failed")
 	}
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 	// Check that the TLS connection times out after 5 seconds and doesn't block for 10 seconds
 	test.Assert(t, (took > (time.Second * 5)), "TLS returned before 5 seconds")
 	test.Assert(t, (took < (time.Second * 10)), "TLS connection didn't timeout after 5 seconds")
@@ -516,7 +516,7 @@ func TestTLSSNI01(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Server's down; expected refusal. Where did we connect?")
 	}
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 
 	httpOnly := httpSrv(t, "")
 	va.tlsPort = getPort(httpOnly)
@@ -556,14 +556,14 @@ func TestTLSSNI02(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("IdentifierType IP shouldn't have worked.")
 	}
-	test.AssertEquals(t, prob.Type, probs.MalformedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.MalformedProblem)
 
 	log.Clear()
 	_, prob = va.validateTLSSNI02(ctx, core.AcmeIdentifier{Type: core.IdentifierDNS, Value: "always.invalid"}, chall)
 	if prob == nil {
 		t.Fatalf("Domain name was supposed to be invalid.")
 	}
-	test.AssertEquals(t, prob.Type, probs.UnknownHostProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnknownHostProblem)
 
 	// Need to create a new authorized keys object to get an unknown SNI (from the signature value)
 	chall.Token = core.NewToken()
@@ -576,7 +576,7 @@ func TestTLSSNI02(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("Validation should have failed")
 	}
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 	// Check that the TLS connection times out after 5 seconds and doesn't block for 10 seconds
 	test.Assert(t, (took > (time.Second * 5)), "TLS returned before 5 seconds")
 	test.Assert(t, (took < (time.Second * 10)), "TLS connection didn't timeout after 5 seconds")
@@ -588,7 +588,7 @@ func TestTLSSNI02(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Server's down; expected refusal. Where did we connect?")
 	}
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 
 	httpOnly := httpSrv(t, "")
 	defer httpOnly.Close()
@@ -624,7 +624,7 @@ func TestTLSError(t *testing.T) {
 	if prob == nil {
 		t.Fatalf("TLS validation should have failed: What cert was used?")
 	}
-	if prob.Type != probs.TLSProblem {
+	if prob.(*probs.ProblemDetails).Type != probs.TLSProblem {
 		t.Errorf("Wrong problem type: got %s, expected type %s",
 			prob, probs.TLSProblem)
 	}
@@ -714,8 +714,8 @@ func TestSNIErrInvalidChain(t *testing.T) {
 	// we expect the error to contain a deduplicated list of domain names from the
 	// subject CN and SANs of the leaf cert
 	expected := "Received 2 certificate(s), first certificate had names \"goodbye.world, hello.world\""
-	test.AssertEquals(t, prob.Type, probs.UnauthorizedProblem)
-	test.AssertContains(t, prob.Detail, expected)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnauthorizedProblem)
+	test.AssertContains(t, prob.(*probs.ProblemDetails).Detail, expected)
 }
 
 func TestValidateHTTP(t *testing.T) {
@@ -772,7 +772,7 @@ func TestValidateTLSSNI01NotSane(t *testing.T) {
 
 	_, prob := va.validateChallenge(ctx, ident, chall)
 
-	test.AssertEquals(t, prob.Type, probs.MalformedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.MalformedProblem)
 }
 
 func TestCAATimeout(t *testing.T) {
@@ -912,7 +912,7 @@ func TestDNSValidationFailure(t *testing.T) {
 
 	_, prob := va.validateChallenge(ctx, ident, chalDNS)
 
-	test.AssertEquals(t, prob.Type, probs.UnauthorizedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnauthorizedProblem)
 }
 
 func TestDNSValidationInvalid(t *testing.T) {
@@ -928,7 +928,7 @@ func TestDNSValidationInvalid(t *testing.T) {
 
 	_, prob := va.validateChallenge(ctx, notDNS, chalDNS)
 
-	test.AssertEquals(t, prob.Type, probs.MalformedProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.MalformedProblem)
 }
 
 func TestDNSValidationNotSane(t *testing.T) {
@@ -952,9 +952,9 @@ func TestDNSValidationNotSane(t *testing.T) {
 
 	for i := 0; i < len(authz.Challenges); i++ {
 		_, prob := va.validateChallenge(ctx, ident, authz.Challenges[i])
-		if prob.Type != probs.MalformedProblem {
+		if prob.(*probs.ProblemDetails).Type != probs.MalformedProblem {
 			t.Errorf("Got wrong error type for %d: expected %s, got %s",
-				i, prob.Type, probs.MalformedProblem)
+				i, prob.(*probs.ProblemDetails).Type, probs.MalformedProblem)
 		}
 		if !strings.Contains(prob.Error(), "Challenge failed consistency check:") {
 			t.Errorf("Got wrong error: %s", prob.Error())
@@ -973,7 +973,7 @@ func TestDNSValidationServFail(t *testing.T) {
 	}
 	_, prob := va.validateChallenge(ctx, badIdent, chalDNS)
 
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 }
 
 func TestDNSValidationNoServer(t *testing.T) {
@@ -989,7 +989,7 @@ func TestDNSValidationNoServer(t *testing.T) {
 
 	_, prob := va.validateChallenge(ctx, ident, chalDNS)
 
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 }
 
 func TestDNSValidationOK(t *testing.T) {
@@ -1038,7 +1038,7 @@ func TestCAAFailure(t *testing.T) {
 
 	ident.Value = "reserved.com"
 	_, prob := va.validateChallengeAndCAA(ctx, ident, chall)
-	test.AssertEquals(t, prob.Type, probs.ConnectionProblem)
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.ConnectionProblem)
 }
 
 func TestLimitedReader(t *testing.T) {
@@ -1052,8 +1052,8 @@ func TestLimitedReader(t *testing.T) {
 
 	_, prob := va.validateChallenge(ctx, ident, chall)
 
-	test.AssertEquals(t, prob.Type, probs.UnauthorizedProblem)
-	test.Assert(t, strings.HasPrefix(prob.Detail, "Invalid response from "),
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Type, probs.UnauthorizedProblem)
+	test.Assert(t, strings.HasPrefix(prob.(*probs.ProblemDetails).Detail, "Invalid response from "),
 		"Expected failure due to truncation")
 }
 
@@ -1302,7 +1302,7 @@ func TestFallbackTLS(t *testing.T) {
 	records, prob = va.validateChallenge(ctx, ident, chall)
 	test.Assert(t, prob != nil, "validation succeeded with broken IPv6 and no IPv4 fallback")
 	// We expect that the problem has the correct error message about working IPs
-	test.AssertEquals(t, prob.Detail, "no working IP addresses found for \"ipv6.localhost\"")
+	test.AssertEquals(t, prob.(*probs.ProblemDetails).Detail, "no working IP addresses found for \"ipv6.localhost\"")
 	// We expect one validation record to be present
 	test.AssertEquals(t, len(records), 1)
 	// We expect that the address eventually used was the IPv6 localhost address

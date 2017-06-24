@@ -109,7 +109,7 @@ type verificationRequestEvent struct {
 // the preferred address, the first net.IP in the addrs slice, and all addresses
 // resolved. This is the same choice made by the Go internal resolution library
 // used by net/http.
-func (va ValidationAuthorityImpl) getAddr(ctx context.Context, hostname string) (net.IP, []net.IP, *probs.ProblemDetails) {
+func (va ValidationAuthorityImpl) getAddr(ctx context.Context, hostname string) (net.IP, []net.IP, error) {
 	addrs, err := va.dnsResolver.LookupHost(ctx, hostname)
 	if err != nil {
 		va.log.Debug(fmt.Sprintf("%s DNS failure: %s", hostname, err))
@@ -196,7 +196,7 @@ func availableAddresses(rec core.ValidationRecord) (v4 []net.IP, v6 []net.IP) {
 
 // resolveAndConstructDialer gets the preferred address using va.getAddr and returns
 // the chosen address and dialer for that address and correct port.
-func (va *ValidationAuthorityImpl) resolveAndConstructDialer(ctx context.Context, name string, port int) (dialer, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) resolveAndConstructDialer(ctx context.Context, name string, port int) (dialer, error) {
 	d := dialer{
 		record: core.ValidationRecord{
 			Hostname: name,
@@ -216,7 +216,7 @@ func (va *ValidationAuthorityImpl) resolveAndConstructDialer(ctx context.Context
 
 // Validation methods
 
-func (va *ValidationAuthorityImpl) fetchHTTP(ctx context.Context, identifier core.AcmeIdentifier, path string, useTLS bool, input core.Challenge) ([]byte, []core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) fetchHTTP(ctx context.Context, identifier core.AcmeIdentifier, path string, useTLS bool, input core.Challenge) ([]byte, []core.ValidationRecord, error) {
 	challenge := input
 
 	host := identifier.Value
@@ -374,7 +374,7 @@ func certNames(cert *x509.Certificate) []string {
 	return names
 }
 
-func (va *ValidationAuthorityImpl) tryGetTLSSNICerts(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, zName string) ([]*x509.Certificate, []core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) tryGetTLSSNICerts(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, zName string) ([]*x509.Certificate, []core.ValidationRecord, error) {
 	addr, allAddrs, problem := va.getAddr(ctx, identifier.Value)
 	validationRecords := []core.ValidationRecord{
 		{
@@ -443,7 +443,7 @@ func (va *ValidationAuthorityImpl) tryGetTLSSNICerts(ctx context.Context, identi
 	return certs, validationRecords, err
 }
 
-func (va *ValidationAuthorityImpl) validateTLSSNI01WithZName(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, zName string) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateTLSSNI01WithZName(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, zName string) ([]core.ValidationRecord, error) {
 	certs, validationRecords, problem := va.tryGetTLSSNICerts(ctx, identifier, challenge, zName)
 	if problem != nil {
 		return validationRecords, problem
@@ -467,7 +467,7 @@ func (va *ValidationAuthorityImpl) validateTLSSNI01WithZName(ctx context.Context
 	return validationRecords, probs.Unauthorized(errText)
 }
 
-func (va *ValidationAuthorityImpl) validateTLSSNI02WithZNames(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, sanAName, sanBName string) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateTLSSNI02WithZNames(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge, sanAName, sanBName string) ([]core.ValidationRecord, error) {
 	certs, validationRecords, problem := va.tryGetTLSSNICerts(ctx, identifier, challenge, sanAName)
 	if problem != nil {
 		return validationRecords, problem
@@ -536,7 +536,7 @@ func (va *ValidationAuthorityImpl) getTLSSNICerts(hostPort string, identifier co
 	return certs, nil
 }
 
-func (va *ValidationAuthorityImpl) validateHTTP01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateHTTP01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, error) {
 	if identifier.Type != core.IdentifierDNS {
 		va.log.Info(fmt.Sprintf("Got non-DNS identifier for HTTP validation: %s", identifier))
 		return nil, probs.Malformed("Identifier type for HTTP validation was not DNS")
@@ -561,7 +561,7 @@ func (va *ValidationAuthorityImpl) validateHTTP01(ctx context.Context, identifie
 	return validationRecords, nil
 }
 
-func (va *ValidationAuthorityImpl) validateTLSSNI01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateTLSSNI01(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, error) {
 	if identifier.Type != "dns" {
 		va.log.Info(fmt.Sprintf("Identifier type for TLS-SNI-01 was not DNS: %s", identifier))
 		return nil, probs.Malformed("Identifier type for TLS-SNI-01 was not DNS")
@@ -575,7 +575,7 @@ func (va *ValidationAuthorityImpl) validateTLSSNI01(ctx context.Context, identif
 	return va.validateTLSSNI01WithZName(ctx, identifier, challenge, ZName)
 }
 
-func (va *ValidationAuthorityImpl) validateTLSSNI02(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateTLSSNI02(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, error) {
 	if identifier.Type != "dns" {
 		va.log.Info(fmt.Sprintf("Identifier type for TLS-SNI-02 was not DNS: %s", identifier))
 		return nil, probs.Malformed("Identifier type for TLS-SNI-02 was not DNS")
@@ -689,7 +689,7 @@ func (va *ValidationAuthorityImpl) checkCAA(ctx context.Context, identifier core
 	return nil
 }
 
-func (va *ValidationAuthorityImpl) validateChallengeAndCAA(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateChallengeAndCAA(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, error) {
 	ch := make(chan *probs.ProblemDetails, 1)
 	go func() {
 		ch <- va.checkCAA(ctx, identifier)
@@ -708,7 +708,7 @@ func (va *ValidationAuthorityImpl) validateChallengeAndCAA(ctx context.Context, 
 	return validationRecords, nil
 }
 
-func (va *ValidationAuthorityImpl) validateChallenge(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, *probs.ProblemDetails) {
+func (va *ValidationAuthorityImpl) validateChallenge(ctx context.Context, identifier core.AcmeIdentifier, challenge core.Challenge) ([]core.ValidationRecord, error) {
 	if err := challenge.CheckConsistencyForValidation(); err != nil {
 		return nil, probs.Malformed("Challenge failed consistency check: %s", err)
 	}
@@ -750,7 +750,11 @@ func (va *ValidationAuthorityImpl) PerformValidation(ctx context.Context, domain
 
 	if prob != nil {
 		challenge.Status = core.StatusInvalid
-		challenge.Error = prob
+		if prob, ok := prob.(*probs.ProblemDetails); ok {
+			challenge.Error = prob
+		} else {
+			challenge.Error = probs.ServerInternal("Validation failed, no details returned.")
+		}
 		logEvent.Error = prob.Error()
 	} else {
 		challenge.Status = core.StatusValid
