@@ -89,6 +89,9 @@ type RegistrationAuthorityImpl struct {
 	pendAuthByRegIDStats metrics.Scope
 	certsForDomainStats  metrics.Scope
 	totalCertsStats      metrics.Scope
+
+	validationMap map[string]struct{}
+	vmMu          sync.Mutex
 }
 
 // NewRegistrationAuthorityImpl constructs a new RA object.
@@ -128,6 +131,7 @@ func NewRegistrationAuthorityImpl(
 		publisher:                    pubc,
 		caa:                          caaClient,
 		orderLifetime:                orderLifetime,
+		validationMap:                make(map[string]struct{}),
 	}
 	return ra
 }
@@ -1189,6 +1193,15 @@ func (ra *RegistrationAuthorityImpl) UpdateAuthorization(ctx context.Context, ba
 		return authz, nil
 	}
 
+	ra.vmMu.Lock()
+	if _, present := ra.validationMap[authz.ID]; present {
+		ra.vmMu.Unlock()
+		return core.Authorization{}, berrors.UnauthorizedError(
+			"Validation for authorization ID %q is already in progress", authz.ID)
+	}
+	ra.validationMap[authz.ID] = struct{}{}
+	ra.vmMu.Unlock()
+
 	// Look up the account key for this authorization
 	reg, err := ra.SA.GetRegistration(ctx, authz.RegistrationID)
 	if err != nil {
@@ -1225,6 +1238,11 @@ func (ra *RegistrationAuthorityImpl) UpdateAuthorization(ctx context.Context, ba
 
 	vaCtx := context.Background()
 	go func() {
+		defer func() {
+			ra.vmMu.Lock()
+			defer ra.vmMu.Unlock()
+			delete(ra.validationMap, authz.ID)
+		}()
 		records, err := ra.VA.PerformValidation(vaCtx, authz.Identifier.Value, authz.Challenges[challengeIndex], authz)
 		var prob *probs.ProblemDetails
 		if p, ok := err.(*probs.ProblemDetails); ok {

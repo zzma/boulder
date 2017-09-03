@@ -1848,6 +1848,27 @@ func TestNewOrder(t *testing.T) {
 	test.AssertEquals(t, len(order.Authorizations), 3)
 }
 
+func TestDisallowParallelValidation(t *testing.T) {
+	va, _, ra, _, cleanUp := initAuthorities(t)
+	defer cleanUp()
+
+	// gum up VA
+	va.argument <- core.Authorization{}
+
+	// create pending authorization
+	authz, err := ra.NewAuthorization(ctx, AuthzRequest, Registration.ID)
+	test.AssertNotError(t, err, "ra.NewAuthorization failed")
+	response, err := makeResponse(authz.Challenges[ResponseIndex])
+	test.AssertNotError(t, err, "makeResponse failed")
+
+	go ra.UpdateAuthorization(ctx, authz, ResponseIndex, response)
+	time.Sleep(time.Millisecond * 250)
+	_, err = ra.UpdateAuthorization(ctx, authz, ResponseIndex, response)
+	test.AssertError(t, err, "ra.UpdateAuthorization didn't return an error when a validation was already in progress")
+	test.AssertEquals(t, err.Error(), fmt.Sprintf("Validation for authorization ID %q is already in progress", authz.ID))
+	<-va.argument
+}
+
 var CAkeyPEM = `
 -----BEGIN RSA PRIVATE KEY-----
 MIIJKQIBAAKCAgEAqmM0dEf/J9MCk2ItzevL0dKJ84lVUtf/vQ7AXFi492vFXc3b
