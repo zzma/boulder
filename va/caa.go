@@ -145,19 +145,17 @@ func (va *ValidationAuthorityImpl) treeClimbingLookupCAAWithCount(ctx context.Co
 		return nil, nil
 	}
 	*maxAttempts--
-	caas, cnames, err := va.dnsClient.LookupCAA(ctx, fqdn)
+	caas, cname, err := va.dnsClient.LookupCAA(ctx, fqdn)
 	if err != nil {
 		return nil, err
 	} else if len(caas) > 0 {
 		return caas, nil
-	} else if len(cnames) > 0 {
-		for _, cname := range cnames {
-			newTargets := withParents(cname.Target)
-			for _, newTarget := range newTargets {
-				caas, err := va.treeClimbingLookupCAAWithCount(ctx, newTarget, maxAttempts)
-				if len(caas) != 0 || err != nil {
-					return caas, err
-				}
+	} else if cname != nil {
+		newTargets := withParents(cname.Target)
+		for _, newTarget := range newTargets {
+			caas, err := va.treeClimbingLookupCAAWithCount(ctx, newTarget, maxAttempts)
+			if len(caas) != 0 || err != nil {
+				return caas, err
 			}
 		}
 	}
