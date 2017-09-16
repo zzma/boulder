@@ -136,21 +136,20 @@ func parentDomains(fqdn string) []string {
 // of parallelCAALookup. When the LegacyCAA flag is enabled, we also
 // do linear tree climbing on single-level aliases.
 func (va *ValidationAuthorityImpl) treeClimbingLookupCAA(ctx context.Context, fqdn string) ([]*dns.CAA, error) {
-	// We will do an (arbitrary) maximum of 15 tree-climbing queries to avoid CNAME/CAA
-	// hybrid loops
-	maxAttempts := 15
+	// We will do an (arbitrary) maximum of 15 tree branching lookups to avoid resource
+	// exhaustion
+	maxBranches := 15
 	targets := map[string]bool{}
-	return va.treeClimbingLookupCAAWithCount(ctx, fqdn, &maxAttempts, &targets)
+	return va.treeClimbingLookupCAAWithCount(ctx, fqdn, &maxBranches, &targets)
 }
 
-func (va *ValidationAuthorityImpl) treeClimbingLookupCAAWithCount(ctx context.Context, fqdn string, attemptsRemaining *int, targets *map[string]bool) ([]*dns.CAA, error) {
-	if *attemptsRemaining < 1 {
+func (va *ValidationAuthorityImpl) treeClimbingLookupCAAWithCount(ctx context.Context, fqdn string, branchesRemaining *int, targets *map[string]bool) ([]*dns.CAA, error) {
+	if *branchesRemaining < 1 {
 		return nil, fmt.Errorf("too many CNAMEs when looking up CAA")
 	}
 	if _, present := (*targets)[fqdn]; present {
 		return nil, nil
 	}
-	*attemptsRemaining--
 	caas, cnames, err := va.dnsClient.LookupCAA(ctx, fqdn)
 	(*targets)[fqdn] = true
 	if err != nil {
@@ -166,9 +165,10 @@ func (va *ValidationAuthorityImpl) treeClimbingLookupCAAWithCount(ctx context.Co
 			// target, because the target itself has already been queried by Unbound
 			// as part of the original LookupCAA, and any CNAMEs are already in this
 			// list.
+			*branchesRemaining--
 			newTargets := parentDomains(cnames[i].Target)
 			for _, newTarget := range newTargets {
-				caas, err := va.treeClimbingLookupCAAWithCount(ctx, newTarget, attemptsRemaining, targets)
+				caas, err := va.treeClimbingLookupCAAWithCount(ctx, newTarget, branchesRemaining, targets)
 				if len(caas) != 0 || err != nil {
 					return caas, err
 				}
