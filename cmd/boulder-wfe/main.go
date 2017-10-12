@@ -126,8 +126,9 @@ func main() {
 	wfe.IndexCacheDuration = c.WFE.IndexCacheDuration.Duration
 	wfe.IssuerCacheDuration = c.WFE.IssuerCacheDuration.Duration
 
-	wfe.IssuerCert, err = cmd.LoadCert(c.Common.IssuerCert)
+	issuerCert, err := core.LoadCert(c.Common.IssuerCert)
 	cmd.FailOnError(err, fmt.Sprintf("Couldn't read issuer cert [%s]", c.Common.IssuerCert))
+	wfe.IssuerCert = issuerCert.Raw
 
 	logger.Info(fmt.Sprintf("WFE using key policy: %#v", kp))
 

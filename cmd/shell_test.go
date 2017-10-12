@@ -131,36 +131,6 @@ func TestVersionString(t *testing.T) {
 	test.AssertEquals(t, versionStr, expected)
 }
 
-func TestLoadCert(t *testing.T) {
-	testCases := []struct {
-		path        string
-		expectedErr string
-	}{
-		{
-			"",
-			"Issuer certificate was not provided in config.",
-		},
-		{
-			"../does/not/exist",
-			"open ../does/not/exist: no such file or directory",
-		},
-		{
-			"../test/test-ca.key",
-			"Invalid certificate value returned",
-		},
-	}
-
-	for _, tc := range testCases {
-		_, err := LoadCert(tc.path)
-		test.AssertError(t, err, fmt.Sprintf("LoadCert(%q) did not error", tc.path))
-		test.AssertEquals(t, err.Error(), tc.expectedErr)
-	}
-
-	bytes, err := LoadCert("../test/test-ca.pem")
-	test.AssertNotError(t, err, "LoadCert(../test/test-ca.pem) errored")
-	test.AssertNotEquals(t, len(bytes), 0)
-}
-
 func TestReadConfigFile(t *testing.T) {
 	err := ReadConfigFile("", nil)
 	test.AssertError(t, err, "ReadConfigFile('') did not error")

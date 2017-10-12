@@ -18,8 +18,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"expvar" // For DebugServer, below.
 	"fmt"
 	"io/ioutil"
@@ -194,28 +192,6 @@ func ProfileCmd(stats metrics.Scope) {
 		stats.Inc("Gc.Rate", gcInc)
 		prevNumGC += gcInc
 	}
-}
-
-// LoadCert loads a PEM-formatted certificate from the provided path, returning
-// it as a byte array, or an error if it couldn't be decoded.
-func LoadCert(path string) (cert []byte, err error) {
-	if path == "" {
-		err = errors.New("Issuer certificate was not provided in config.")
-		return
-	}
-	pemBytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		return
-	}
-
-	block, _ := pem.Decode(pemBytes)
-	if block == nil || block.Type != "CERTIFICATE" {
-		err = errors.New("Invalid certificate value returned")
-		return
-	}
-
-	cert = block.Bytes
-	return
 }
 
 // DebugServer starts a server to receive debug information.  Typical

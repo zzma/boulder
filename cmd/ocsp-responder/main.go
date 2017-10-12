@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
@@ -105,13 +106,9 @@ func (src *DBSource) Response(req *ocsp.Request) ([]byte, http.Header, error) {
 
 func makeDBSource(dbMap dbSelector, issuerCert string, log blog.Logger) (*DBSource, error) {
 	// Load the CA's key so we can store its SubjectKey in the DB
-	caCertDER, err := cmd.LoadCert(issuerCert)
+	caCert, err := core.LoadCert(issuerCert)
 	if err != nil {
 		return nil, fmt.Errorf("Could not read issuer cert %s: %s", issuerCert, err)
-	}
-	caCert, err := x509.ParseCertificate(caCertDER)
-	if err != nil {
-		return nil, fmt.Errorf("Could not parse issuer cert %s: %s", issuerCert, err)
 	}
 	if len(caCert.SubjectKeyId) == 0 {
 		return nil, fmt.Errorf("Empty subjectKeyID")
