@@ -66,7 +66,7 @@ func main() {
 	// Configure DB
 	dbURL, err := config.Filler.DBConfig.URL()
 	cmd.FailOnError(err, "Couldn't load DB URL")
-	dbMap, err := sa.NewDbMap(dbURL, int(config.Filler.Parallelism))
+	dbMap, err := sa.NewDbMap(dbURL, 1000)
 	cmd.FailOnError(err, "Could not connect to database")
 
 	dbMap.AddTableWithName(model{}, "pendingAuthorizations").SetKeys(false, "ID")
