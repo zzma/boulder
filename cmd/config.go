@@ -11,7 +11,6 @@ import (
 	"time"
 
 	cfsslConfig "github.com/cloudflare/cfssl/config"
-	"github.com/letsencrypt/pkcs11key"
 
 	"github.com/letsencrypt/boulder/core"
 )
@@ -164,7 +163,6 @@ type IssuerConfig struct {
 	// A file from which a pkcs11key.Config will be read and parsed, if present
 	ConfigFile string
 	File       string
-	PKCS11     *pkcs11key.Config
 	CertFile   string
 	// Number of sessions to open with the HSM. For maximum performance,
 	// this should be equal to the number of cores in the HSM. Defaults to 1.
