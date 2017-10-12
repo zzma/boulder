@@ -46,6 +46,7 @@ var sqlOpen = func(dbType, connectStr string) (*sql.DB, error) {
 // setMaxOpenConns is also used so that we can replace it for testing.
 var setMaxOpenConns = func(db *sql.DB, maxOpenConns int) {
 	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxOpenConns)
 }
 
 // NewDbMapFromConfig functions similarly to NewDbMap, but it takes the
