@@ -45,9 +45,14 @@ type expiredAuthzPurger struct {
 	batchSize int64
 }
 
-func (p *expiredAuthzPurger) purge(table string, yes bool, purgeBefore time.Time, parallelism int) error {
+// purge looks up pending or finalized authzs (depending on the value of
+// `table`) that expire before `purgeBefore`. If `yes` is true, or if a user at
+// the terminal types "y", it will then delete those authzs, using `parallel`
+// goroutines.
+// Neither table has an index on `expires` by itself
+func (p *expiredAuthzPurger) purge(table string, yes bool, purgeBefore time.Time, parallelism int, max int) error {
 	var ids []string
-	for {
+	for len(ids) < max {
 		var idBatch []string
 		var query string
 		switch table {
@@ -71,6 +76,7 @@ func (p *expiredAuthzPurger) purge(table string, yes bool, purgeBefore time.Time
 		}
 		ids = append(ids, idBatch...)
 	}
+	ids = ids[:max]
 
 	if !yes {
 		reader := bufio.NewReader(os.Stdin)
