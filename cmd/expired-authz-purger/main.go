@@ -75,7 +75,6 @@ func (p *expiredAuthzPurger) purge(table string, yes bool, purgeBefore time.Time
 		}
 		ids = append(ids, idBatch...)
 	}
-	p.log.Info("len ids %d max %d", len(ids), max)
 	if len(ids) > max {
 		ids = ids[:max]
 	}
