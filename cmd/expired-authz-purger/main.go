@@ -203,6 +203,7 @@ func main() {
 		os.Exit(1)
 	}
 	purgeBefore := purger.clk.Now().Add(-config.ExpiredAuthzPurger.GracePeriod.Duration)
+	logger.Info("Beginning purge")
 	err = purger.purgeAuthzs(purgeBefore, *yes, int(config.ExpiredAuthzPurger.Parallelism),
 		int(config.ExpiredAuthzPurger.MaxAuthzs))
 	cmd.FailOnError(err, "Failed to purge authorizations")
