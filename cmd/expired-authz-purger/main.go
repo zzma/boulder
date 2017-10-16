@@ -175,19 +175,20 @@ func main() {
 	err = features.Set(config.ExpiredAuthzPurger.Features)
 	cmd.FailOnError(err, "Failed to set feature flags")
 
-	auditlogger := cmd.NewLogger(config.ExpiredAuthzPurger.Syslog)
-	auditlogger.Info(cmd.VersionString())
+	logger := cmd.NewLogger(config.ExpiredAuthzPurger.Syslog)
+	logger.Info(cmd.VersionString())
 
-	defer auditlogger.AuditPanic()
+	defer logger.AuditPanic()
 
 	// Configure DB
 	dbURL, err := config.ExpiredAuthzPurger.DBConfig.URL()
 	cmd.FailOnError(err, "Couldn't load DB URL")
 	dbMap, err := sa.NewDbMap(dbURL, config.ExpiredAuthzPurger.DBConfig.MaxDBConns)
 	cmd.FailOnError(err, "Could not connect to database")
+	sa.SetSQLDebug(dbMap, logger)
 
 	purger := &expiredAuthzPurger{
-		log:       auditlogger,
+		log:       logger,
 		clk:       cmd.Clock(),
 		db:        dbMap,
 		batchSize: int64(config.ExpiredAuthzPurger.BatchSize),
