@@ -29,6 +29,7 @@ type eapConfig struct {
 
 		GracePeriod cmd.ConfigDuration
 		BatchSize   int
+		MaxAuthzs   int
 		Parallelism uint
 
 		Features map[string]bool
@@ -147,9 +148,9 @@ func deleteAuthorization(db *gorp.DbMap, table, id string) error {
 	return nil
 }
 
-func (p *expiredAuthzPurger) purgeAuthzs(purgeBefore time.Time, yes bool, parallelism int) error {
+func (p *expiredAuthzPurger) purgeAuthzs(purgeBefore time.Time, yes bool, parallelism int, max int) error {
 	for _, table := range []string{"pendingAuthorizations", "authz"} {
-		err := p.purge(table, yes, purgeBefore, parallelism)
+		err := p.purge(table, yes, purgeBefore, parallelism, max)
 		if err != nil {
 			return err
 		}
@@ -201,6 +202,7 @@ func main() {
 		os.Exit(1)
 	}
 	purgeBefore := purger.clk.Now().Add(-config.ExpiredAuthzPurger.GracePeriod.Duration)
-	err = purger.purgeAuthzs(purgeBefore, *yes, int(config.ExpiredAuthzPurger.Parallelism))
+	err = purger.purgeAuthzs(purgeBefore, *yes, int(config.ExpiredAuthzPurger.Parallelism),
+		int(config.ExpiredAuthzPurger.MaxAuthzs))
 	cmd.FailOnError(err, "Failed to purge authorizations")
 }
