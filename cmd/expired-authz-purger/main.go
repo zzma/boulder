@@ -75,7 +75,7 @@ func (p *expiredAuthzPurger) purge(table string, yes bool, purgeBefore time.Time
 		}
 		ids = append(ids, idBatch...)
 	}
-	ids = ids[:max]
+	ids = ids[:max-1]
 
 	if !yes {
 		reader := bufio.NewReader(os.Stdin)
