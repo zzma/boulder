@@ -92,8 +92,16 @@ func setupSeccomp() error {
 		"rt_sigprocmask",
 		"mprotect",
 		"clone",
-		// "sched_yield",
-		// "pselect6",
+		"set_robust_list",
+		"sched_yield",
+		"pselect6",
+		"sigaltstack",
+		"gettid",
+		"bind",
+		"listen",
+		"epoll_wait",
+		"accept4",
+		"getsockopt",
 	} {
 		call, err := seccomp.GetSyscallFromName(callName)
 		if err != nil {
