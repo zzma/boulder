@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/seccomp/libseccomp-golang"
+
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/core"
 	"github.com/letsencrypt/boulder/features"
@@ -62,6 +64,46 @@ type config struct {
 	}
 }
 
+func setupSeccomp() error {
+	filter, err := seccomp.NewFilter(seccomp.ActTrap)
+	if err != nil {
+		return err
+	}
+	filter.AddArch(seccomp.ArchAMD64)
+	for _, callName := range []string{
+		"write",
+		"mmap",
+		"exit_group",
+		"openat",
+		"epoll_ctl",
+		"fstat",
+		"read",
+		"close",
+		"fcntl",
+		"socket",
+		"setsockopt",
+		"connect",
+		"getsockname",
+		"getpeername",
+		"futex",
+		"getpid",
+		"stat",
+		"getrandom",
+		"rt_sigprocmask",
+		"mprotect",
+		"clone",
+		// "sched_yield",
+		// "pselect6",
+	} {
+		call, err := seccomp.GetSyscallFromName(callName)
+		if err != nil {
+			return err
+		}
+		filter.AddRule(call, seccomp.ActAllow)
+	}
+	return filter.Load()
+}
+
 func setupWFE(c config, logger blog.Logger, stats metrics.Scope) (core.RegistrationAuthority, core.StorageAuthority) {
 	var tls *tls.Config
 	var err error
@@ -82,6 +124,9 @@ func setupWFE(c config, logger blog.Logger, stats metrics.Scope) (core.Registrat
 }
 
 func main() {
+	err := setupSeccomp()
+	cmd.FailOnError(err, "Failed to setup seccomp")
+
 	configFile := flag.String("config", "", "File path to the configuration file for this service")
 	flag.Parse()
 	if *configFile == "" {
@@ -90,7 +135,7 @@ func main() {
 	}
 
 	var c config
-	err := cmd.ReadConfigFile(*configFile, &c)
+	err = cmd.ReadConfigFile(*configFile, &c)
 	cmd.FailOnError(err, "Reading JSON config file into config structure")
 
 	err = features.Set(c.WFE.Features)
