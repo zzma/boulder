@@ -18,18 +18,18 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	ct "github.com/google/certificate-transparency-go"
 	ctTLS "github.com/google/certificate-transparency-go/tls"
 	"github.com/jmhodges/clock"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 
 	blog "github.com/letsencrypt/boulder/log"
 	"github.com/letsencrypt/boulder/metrics"
-	"github.com/letsencrypt/boulder/metrics/mock_metrics"
 	"github.com/letsencrypt/boulder/mocks"
 	"github.com/letsencrypt/boulder/test"
 )
@@ -120,8 +120,8 @@ const issuerPath = "../test/test-ca.pem"
 var log = blog.UseMock()
 var ctx = context.Background()
 
-func getPort(hs *httptest.Server) (int, error) {
-	url, err := url.Parse(hs.URL)
+func getPort(srvURL string) (int, error) {
+	url, err := url.Parse(srvURL)
 	if err != nil {
 		return 0, err
 	}
@@ -184,8 +184,14 @@ func createSignedSCT(leaf []byte, k *ecdsa.PrivateKey) string {
 	return string(jsonSCT)
 }
 
-func logSrv(leaf []byte, k *ecdsa.PrivateKey) *httptest.Server {
+type testLogSrv struct {
+	*httptest.Server
+	submissions int64
+}
+
+func logSrv(leaf []byte, k *ecdsa.PrivateKey) *testLogSrv {
 	sct := createSignedSCT(leaf, k)
+	testLog := &testLogSrv{}
 	m := http.NewServeMux()
 	m.HandleFunc("/ct/", func(w http.ResponseWriter, r *http.Request) {
 		decoder := json.NewDecoder(r.Body)
@@ -197,12 +203,13 @@ func logSrv(leaf []byte, k *ecdsa.PrivateKey) *httptest.Server {
 		// Submissions should always contain at least one cert
 		if len(jsonReq.Chain) >= 1 {
 			fmt.Fprint(w, sct)
+			atomic.AddInt64(&testLog.submissions, 1)
 		}
 	})
 
-	server := httptest.NewUnstartedServer(m)
-	server.Start()
-	return server
+	testLog.Server = httptest.NewUnstartedServer(m)
+	testLog.Server.Start()
+	return testLog
 }
 
 func errorLogSrv() *httptest.Server {
@@ -265,7 +272,6 @@ func setup(t *testing.T) (*Impl, *x509.Certificate, *ecdsa.PrivateKey) {
 
 	pub := New(nil,
 		nil,
-		0,
 		log,
 		metrics.NewNoopScope(),
 		mocks.NewStorageAuthority(clock.NewFake()))
@@ -294,32 +300,24 @@ func addLog(t *testing.T, pub *Impl, port int, pubKey *ecdsa.PublicKey) {
 func TestBasicSuccessful(t *testing.T) {
 	pub, leaf, k := setup(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	scope := mock_metrics.NewMockScope(ctrl)
-	pub.stats = scope
-
 	server := logSrv(leaf.Raw, k)
 	defer server.Close()
-	port, err := getPort(server)
+	port, err := getPort(server.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, port, &k.PublicKey)
 
-	statName := pub.ctLogs[0].statName
 	log.Clear()
-	scope.EXPECT().NewScope(statName).Return(scope)
-	scope.EXPECT().Inc("Submits", int64(1))
-	scope.EXPECT().TimingDuration("SubmitLatency", gomock.Any())
 	err = pub.SubmitToCT(ctx, leaf.Raw)
 	test.AssertNotError(t, err, "Certificate submission failed")
 	test.AssertEquals(t, len(log.GetAllMatching("Failed to.*")), 0)
+	test.AssertEquals(t, 1, test.CountHistogramSamples(pub.metrics.submissionLatency.With(prometheus.Labels{
+		"log":    pub.ctLogs[0].uri,
+		"status": "success",
+	})))
 
 	// No Intermediate
 	pub.issuerBundle = []ct.ASN1Cert{}
 	log.Clear()
-	scope.EXPECT().NewScope(statName).Return(scope)
-	scope.EXPECT().Inc("Submits", int64(1))
-	scope.EXPECT().TimingDuration("SubmitLatency", gomock.Any())
 	err = pub.SubmitToCT(ctx, leaf.Raw)
 	test.AssertNotError(t, err, "Certificate submission failed")
 	test.AssertEquals(t, len(log.GetAllMatching("Failed to.*")), 0)
@@ -330,7 +328,7 @@ func TestGoodRetry(t *testing.T) {
 
 	server := retryableLogSrv(leaf.Raw, k, 1, nil)
 	defer server.Close()
-	port, err := getPort(server)
+	port, err := getPort(server.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, port, &k.PublicKey)
 
@@ -344,26 +342,20 @@ func TestGoodRetry(t *testing.T) {
 func TestUnexpectedError(t *testing.T) {
 	pub, leaf, k := setup(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	scope := mock_metrics.NewMockScope(ctrl)
-	pub.stats = scope
-
 	srv := errorLogSrv()
 	defer srv.Close()
-	port, err := getPort(srv)
+	port, err := getPort(srv.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, port, &k.PublicKey)
-	statName := pub.ctLogs[0].statName
 
 	log.Clear()
-	scope.EXPECT().NewScope(statName).Return(scope)
-	scope.EXPECT().Inc("Submits", int64(1))
-	scope.EXPECT().Inc("Errors", int64(1))
-	scope.EXPECT().TimingDuration("SubmitLatency", gomock.Any())
 	err = pub.SubmitToCT(ctx, leaf.Raw)
 	test.AssertNotError(t, err, "Certificate submission failed")
 	test.AssertEquals(t, len(log.GetAllMatching("Failed .*http://localhost:"+strconv.Itoa(port))), 1)
+	test.AssertEquals(t, 1, test.CountHistogramSamples(pub.metrics.submissionLatency.With(prometheus.Labels{
+		"log":    pub.ctLogs[0].uri,
+		"status": "error",
+	})))
 }
 
 func TestRetryAfter(t *testing.T) {
@@ -372,7 +364,7 @@ func TestRetryAfter(t *testing.T) {
 	retryAfter := 2
 	server := retryableLogSrv(leaf.Raw, k, 2, &retryAfter)
 	defer server.Close()
-	port, err := getPort(server)
+	port, err := getPort(server.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, port, &k.PublicKey)
 
@@ -390,7 +382,7 @@ func TestRetryAfterContext(t *testing.T) {
 	retryAfter := 2
 	server := retryableLogSrv(leaf.Raw, k, 2, &retryAfter)
 	defer server.Close()
-	port, err := getPort(server)
+	port, err := getPort(server.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, port, &k.PublicKey)
 
@@ -411,9 +403,9 @@ func TestMultiLog(t *testing.T) {
 	defer srvA.Close()
 	srvB := logSrv(leaf.Raw, k)
 	defer srvB.Close()
-	portA, err := getPort(srvA)
+	portA, err := getPort(srvA.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
-	portB, err := getPort(srvB)
+	portB, err := getPort(srvB.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, portA, &k.PublicKey)
 	addLog(t, pub, portB, &k.PublicKey)
@@ -429,7 +421,7 @@ func TestBadServer(t *testing.T) {
 
 	srv := badLogSrv()
 	defer srv.Close()
-	port, err := getPort(srv)
+	port, err := getPort(srv.URL)
 	test.AssertNotError(t, err, "Failed to get test server port")
 	addLog(t, pub, port, &k.PublicKey)
 
@@ -486,4 +478,41 @@ func TestLogCache(t *testing.T) {
 	test.AssertEquals(t, cache.Len(), 2)
 	test.AssertEquals(t, l2.uri, "http://log.two.example.com")
 	test.AssertEquals(t, l2.logID, k2b64)
+}
+
+func TestSubmitToCTParallel(t *testing.T) {
+	pub, leaf, k := setup(t)
+
+	// Create a server that will timeout on submission
+	retryAfter := 2
+	srvA := retryableLogSrv(leaf.Raw, k, 2, &retryAfter)
+	defer srvA.Close()
+
+	// Create a server that will instantly accept a submission
+	k2, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	test.AssertNotError(t, err, "Couldn't generate test key")
+	srvB := logSrv(leaf.Raw, k2)
+	defer srvB.Close()
+
+	portA, err := getPort(srvA.URL)
+	test.AssertNotError(t, err, "Failed to get test server port")
+	portB, err := getPort(srvB.URL)
+	test.AssertNotError(t, err, "Failed to get test server port")
+	// We add the two logs with the slow log we expect to timeout first
+	// and the fast log second. In a serial submission scenario this would
+	// cause the first log to eat up the entire time budget for submission
+	// and we would never get to submitting to the second log.
+	addLog(t, pub, portA, &k.PublicKey)
+	addLog(t, pub, portB, &k2.PublicKey)
+
+	log.Clear()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*250)
+	defer cancel()
+	err = pub.SubmitToCT(ctx, leaf.Raw)
+	test.AssertNotError(t, err, "Certificate submission failed")
+	// Check that we got both a submission to the fast log and a timeout from
+	// the slow log so that we know we are submitting in parallel and that the
+	// time budget isn't being consumed by one and depriving the other.
+	test.AssertEquals(t, srvB.submissions, int64(1))
+	test.AssertEquals(t, len(log.GetAllMatching("Failed to submit.*")), 1)
 }

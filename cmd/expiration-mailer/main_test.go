@@ -400,13 +400,13 @@ func addExpiringCerts(t *testing.T, ctx *testCtx) []core.Certificate {
 	return []core.Certificate{*certA, *certB, *certC, *certD}
 }
 
-func countGroupsAtCapacity(group string, counter *prometheus.CounterVec) int {
+func countGroupsAtCapacity(group string, counter *prometheus.GaugeVec) int {
 	ch := make(chan prometheus.Metric, 10)
 	counter.With(prometheus.Labels{"nagGroup": group}).Collect(ch)
 	m := <-ch
 	var iom io_prometheus_client.Metric
 	_ = m.Write(&iom)
-	return int(iom.Counter.GetValue())
+	return int(iom.Gauge.GetValue())
 }
 
 func TestFindCertsAtCapacity(t *testing.T) {
@@ -812,7 +812,7 @@ func setup(t *testing.T, nagTimes []time.Duration) *testCtx {
 		t.Fatalf("Couldn't connect the database: %s", err)
 	}
 	fc := newFakeClock(t)
-	ssa, err := sa.NewSQLStorageAuthority(dbMap, fc, log, metrics.NewNoopScope())
+	ssa, err := sa.NewSQLStorageAuthority(dbMap, fc, log, metrics.NewNoopScope(), 1)
 	if err != nil {
 		t.Fatalf("unable to create SQLStorageAuthority: %s", err)
 	}

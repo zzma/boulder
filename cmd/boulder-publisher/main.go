@@ -20,9 +20,8 @@ import (
 type config struct {
 	Publisher struct {
 		cmd.ServiceConfig
-		SubmissionTimeout cmd.ConfigDuration
-		SAService         *cmd.GRPCClientConfig
-		Features          map[string]bool
+		SAService *cmd.GRPCClientConfig
+		Features  map[string]bool
 	}
 
 	Syslog cmd.SyslogConfig
@@ -49,7 +48,7 @@ func main() {
 	err = features.Set(c.Publisher.Features)
 	cmd.FailOnError(err, "Failed to set feature flags")
 
-	scope, logger := cmd.StatsAndLogging(c.Syslog)
+	scope, logger := cmd.StatsAndLogging(c.Syslog, c.Publisher.DebugAddr)
 	defer logger.AuditPanic()
 	logger.Info(cmd.VersionString())
 
@@ -83,7 +82,6 @@ func main() {
 	pubi := publisher.New(
 		bundle,
 		logs,
-		c.Publisher.SubmissionTimeout.Duration,
 		logger,
 		scope,
 		sac)
@@ -106,9 +104,6 @@ func main() {
 			grpcSrv.GracefulStop()
 		}
 	})
-
-	go cmd.DebugServer(c.Publisher.DebugAddr)
-	go cmd.ProfileCmd(scope)
 
 	select {}
 }

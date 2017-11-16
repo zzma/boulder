@@ -3,6 +3,7 @@ package bdns
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -139,12 +140,6 @@ func mockDNSQuery(w dns.ResponseWriter, r *dns.Msg) {
 				record.Flag = 1
 				appendAnswer(record)
 			}
-			if q.Name == "dname.example.com." {
-				appendAnswer(&dns.DNAME{
-					Hdr:    dns.RR_Header{Name: "dname.example.com.", Rrtype: dns.TypeDNAME, Class: dns.ClassINET, Ttl: 0},
-					Target: "dname.example.net.",
-				})
-			}
 		case dns.TypeTXT:
 			if q.Name == "split-txt.letsencrypt.org." {
 				record := new(dns.TXT)
@@ -178,19 +173,39 @@ func mockDNSQuery(w dns.ResponseWriter, r *dns.Msg) {
 
 func serveLoopResolver(stopChan chan bool) {
 	dns.HandleFunc(".", mockDNSQuery)
-	server := &dns.Server{Addr: dnsLoopbackAddr, Net: "tcp", ReadTimeout: time.Second, WriteTimeout: time.Second}
+	tcpServer := &dns.Server{
+		Addr:         dnsLoopbackAddr,
+		Net:          "tcp",
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	}
+	udpServer := &dns.Server{
+		Addr:         dnsLoopbackAddr,
+		Net:          "udp",
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	}
 	go func() {
-		err := server.ListenAndServe()
+		err := tcpServer.ListenAndServe()
 		if err != nil {
 			fmt.Println(err)
-			return
+		}
+	}()
+	go func() {
+		err := udpServer.ListenAndServe()
+		if err != nil {
+			fmt.Println(err)
 		}
 	}()
 	go func() {
 		<-stopChan
-		err := server.Shutdown()
+		err := tcpServer.Shutdown()
 		if err != nil {
-			fmt.Println(err)
+			log.Fatal(err)
+		}
+		err = udpServer.Shutdown()
+		if err != nil {
+			log.Fatal(err)
 		}
 	}()
 }
@@ -206,7 +221,7 @@ func pollServer() {
 			fmt.Fprintln(os.Stderr, "Timeout reached while testing for the dns server to come up")
 			os.Exit(1)
 		case <-ticker.C:
-			conn, _ := dns.DialTimeout("tcp", dnsLoopbackAddr, backoff)
+			conn, _ := dns.DialTimeout("udp", dnsLoopbackAddr, backoff)
 			if conn != nil {
 				_ = conn.Close()
 				return
@@ -407,11 +422,6 @@ func TestDNSLookupCAA(t *testing.T) {
 	caas, _, err = obj.LookupCAA(context.Background(), "cname.example.com")
 	test.AssertNotError(t, err, "CAA lookup failed")
 	test.Assert(t, len(caas) > 0, "Should follow CNAME to find CAA")
-
-	_, _, err = obj.LookupCAA(context.Background(), "dname.example.com")
-	if err == nil {
-		t.Errorf("Expected failure when returning DNAME, but got success")
-	}
 }
 
 func TestDNSTXTAuthorities(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	ct "github.com/google/certificate-transparency-go"
 	ctClient "github.com/google/certificate-transparency-go/client"
 	"github.com/google/certificate-transparency-go/jsonclient"
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 
 	"github.com/letsencrypt/boulder/core"
@@ -24,7 +25,6 @@ import (
 type Log struct {
 	logID    string
 	uri      string
-	statName string
 	client   *ctClient.LogClient
 	verifier *ct.SignatureVerifier
 }
@@ -91,7 +91,12 @@ func NewLog(uri, b64PK string, logger blog.Logger) (*Log, error) {
 		Logger:    logAdaptor{logger},
 		PublicKey: pemPK,
 	}
-	client, err := ctClient.New(url.String(), &http.Client{}, opts)
+	// We set the HTTP client timeout to about half of what we expect
+	// the gRPC timeout to be set to. This allows us to retry the
+	// request at least twice in the case where the server we are
+	// talking to is simply hanging indefinitely.
+	httpClient := &http.Client{Timeout: time.Minute*2 + time.Second*30}
+	client, err := ctClient.New(url.String(), httpClient, opts)
 	if err != nil {
 		return nil, fmt.Errorf("making CT client: %s", err)
 	}
@@ -111,16 +116,9 @@ func NewLog(uri, b64PK string, logger blog.Logger) (*Log, error) {
 		return nil, err
 	}
 
-	// Replace slashes with dots for statsd logging
-	sanitizedPath := strings.TrimPrefix(url.Path, "/")
-	sanitizedPath = strings.Replace(sanitizedPath, "/", ".", -1)
-
-	sanitizedHost := strings.Replace(url.Host, ":", "_", -1)
-
 	return &Log{
 		logID:    b64PK,
-		uri:      uri,
-		statName: fmt.Sprintf("%s.%s", sanitizedHost, sanitizedPath),
+		uri:      url.String(),
 		client:   client,
 		verifier: verifier,
 	}, nil
@@ -130,17 +128,35 @@ type ctSubmissionRequest struct {
 	Chain []string `json:"chain"`
 }
 
+type pubMetrics struct {
+	submissionLatency *prometheus.HistogramVec
+}
+
+func initMetrics(stats metrics.Scope) *pubMetrics {
+	submissionLatency := prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name: "ct_submission_time_seconds",
+			Help: "Time taken to submit a certificate to a CT log",
+		},
+		[]string{"log", "status"},
+	)
+	stats.MustRegister(submissionLatency)
+
+	return &pubMetrics{
+		submissionLatency: submissionLatency,
+	}
+}
+
 // Impl defines a Publisher
 type Impl struct {
 	log          blog.Logger
-	stats        metrics.Scope
 	client       *http.Client
 	issuerBundle []ct.ASN1Cert
 	ctLogsCache  logCache
 	// ctLogs is slightly redundant with the logCache, and should be removed. See
 	// issue https://github.com/letsencrypt/boulder/issues/2357
-	ctLogs            []*Log
-	submissionTimeout time.Duration
+	ctLogs  []*Log
+	metrics *pubMetrics
 
 	sa core.StorageAuthority
 }
@@ -150,24 +166,19 @@ type Impl struct {
 func New(
 	bundle []ct.ASN1Cert,
 	logs []*Log,
-	submissionTimeout time.Duration,
 	logger blog.Logger,
 	stats metrics.Scope,
 	sa core.StorageAuthority,
 ) *Impl {
-	if submissionTimeout == 0 {
-		submissionTimeout = time.Hour * 12
-	}
 	return &Impl{
-		submissionTimeout: submissionTimeout,
-		issuerBundle:      bundle,
+		issuerBundle: bundle,
 		ctLogsCache: logCache{
 			logs: make(map[string]*Log),
 		},
-		ctLogs: logs,
-		log:    logger,
-		stats:  stats,
-		sa:     sa,
+		ctLogs:  logs,
+		log:     logger,
+		sa:      sa,
+		metrics: initMetrics(stats),
 	}
 }
 
@@ -183,8 +194,6 @@ func (pub *Impl) SubmitToSingleCT(
 		return err
 	}
 
-	localCtx, cancel := context.WithTimeout(ctx, pub.submissionTimeout)
-	defer cancel()
 	chain := append([]ct.ASN1Cert{ct.ASN1Cert{der}}, pub.issuerBundle...)
 
 	// Add a log URL/pubkey to the cache, if already present the
@@ -196,20 +205,23 @@ func (pub *Impl) SubmitToSingleCT(
 		return err
 	}
 
-	stats := pub.stats.NewScope(ctLog.statName)
-	stats.Inc("Submits", 1)
 	start := time.Now()
 	err = pub.singleLogSubmit(
-		localCtx,
+		ctx,
 		chain,
 		core.SerialToString(cert.SerialNumber),
 		ctLog)
-	stats.TimingDuration("SubmitLatency", time.Now().Sub(start))
+	took := time.Since(start).Seconds()
+	status := "success"
 	if err != nil {
 		pub.log.AuditErr(
 			fmt.Sprintf("Failed to submit certificate to CT log at %s: %s", ctLog.uri, err))
-		stats.Inc("Errors", 1)
+		status = "error"
 	}
+	pub.metrics.submissionLatency.With(prometheus.Labels{
+		"log":    ctLog.uri,
+		"status": status,
+	}).Observe(took)
 
 	return nil
 }
@@ -217,12 +229,20 @@ func (pub *Impl) SubmitToSingleCT(
 // SubmitToCT will submit the certificate represented by certDER to any CT
 // logs configured in pub.CT.Logs.
 func (pub *Impl) SubmitToCT(ctx context.Context, der []byte) error {
+	wg := new(sync.WaitGroup)
 	for _, ctLog := range pub.ctLogs {
-		err := pub.SubmitToSingleCT(ctx, ctLog.uri, ctLog.logID, der)
-		if err != nil {
-			return err
-		}
+		wg.Add(1)
+		// Do each submission in a goroutine so a single slow log doesn't eat
+		// all of the context and prevent submission to the rest of the logs
+		go func(ctLog *Log) {
+			defer wg.Done()
+			// Nothing actually consumes the errors returned from SubmitToCT
+			// so instead of using a channel to collect them we just throw
+			// it away here.
+			_ = pub.SubmitToSingleCT(ctx, ctLog.uri, ctLog.logID, der)
+		}(ctLog)
 	}
+	wg.Wait()
 	return nil
 }
 

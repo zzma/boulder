@@ -3,7 +3,6 @@
 package features
 
 import (
-	"expvar"
 	"fmt"
 	"sync"
 )
@@ -28,6 +27,8 @@ const (
 	AllowRenewalFirstRL
 	RecheckCAA
 	LegacyCAA
+	UDPDNS
+	ROCACheck
 )
 
 // List of features and their default value, protected by fMu
@@ -47,6 +48,8 @@ var features = map[FeatureFlag]bool{
 	AllowRenewalFirstRL:      false,
 	RecheckCAA:               false,
 	LegacyCAA:                false,
+	UDPDNS:                   false,
+	ROCACheck:                false,
 }
 
 var fMu = new(sync.RWMutex)
@@ -62,13 +65,6 @@ func init() {
 	}
 }
 
-// expvar.Set requires a type that satisfies the expvar.Var interface,
-// since neither string nor bool implement this interface we require
-// a basic shim.
-type boolVar bool
-
-func (b boolVar) String() string { return fmt.Sprintf("%t", b) }
-
 // Set accepts a list of features and whether they should
 // be enabled or disabled, it will return a error if passed
 // a feature name that it doesn't know
@@ -83,16 +79,6 @@ func Set(featureSet map[string]bool) error {
 		features[f] = v
 	}
 	return nil
-}
-
-// Export populates a expvar.Map with the state of all
-// of the features.
-func Export(m *expvar.Map) {
-	fMu.RLock()
-	defer fMu.RUnlock()
-	for f, v := range features {
-		m.Set(f.String(), boolVar(v))
-	}
 }
 
 // Enabled returns true if the feature is enabled or false

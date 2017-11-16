@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
 
+	"github.com/letsencrypt/boulder/features"
 	"github.com/letsencrypt/boulder/metrics"
 )
 
@@ -191,6 +192,9 @@ func NewDNSClientImpl(
 	// Set timeout for underlying net.Conn
 	dnsClient.ReadTimeout = readTimeout
 	dnsClient.Net = "tcp"
+	if features.Enabled(features.UDPDNS) {
+		dnsClient.Net = "udp"
+	}
 
 	queryTime := prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -467,8 +471,6 @@ func (dnsClient *DNSClientImpl) LookupCAA(ctx context.Context, hostname string) 
 	for _, answer := range r.Answer {
 		if caaR, ok := answer.(*dns.CAA); ok {
 			CAAs = append(CAAs, caaR)
-		} else if _, ok := answer.(*dns.DNAME); ok {
-			return nil, nil, fmt.Errorf("Got DNAME when looking up CNAME. DNAMEs not supported.")
 		} else if cnameR, ok := answer.(*dns.CNAME); ok {
 			CNAMEs = append(CNAMEs, cnameR)
 		}

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jmhodges/clock"
@@ -33,6 +34,11 @@ type SQLStorageAuthority struct {
 	clk   clock.Clock
 	log   blog.Logger
 	scope metrics.Scope
+
+	// For RPCs that generate multiple, parallelizable SQL queries, this is the
+	// max parallelism they will use (to avoid consuming too many MariaDB
+	// threads).
+	parallelismPerRPC int
 }
 
 func digest256(data []byte) []byte {
@@ -69,14 +75,16 @@ func NewSQLStorageAuthority(
 	clk clock.Clock,
 	logger blog.Logger,
 	scope metrics.Scope,
+	parallelismPerRPC int,
 ) (*SQLStorageAuthority, error) {
 	SetSQLDebug(dbMap, logger)
 
 	ssa := &SQLStorageAuthority{
-		dbMap: dbMap,
-		clk:   clk,
-		log:   logger,
-		scope: scope,
+		dbMap:             dbMap,
+		clk:               clk,
+		log:               logger,
+		scope:             scope,
+		parallelismPerRPC: parallelismPerRPC,
 	}
 
 	return ssa, nil
@@ -317,30 +325,64 @@ func (ssa *SQLStorageAuthority) CountRegistrationsByIPRange(ctx context.Context,
 	return int(count), nil
 }
 
-// TooManyCertificatesError indicates that the number of certificates returned by
-// CountCertificates exceeded the hard-coded limit of 10,000 certificates.
-type TooManyCertificatesError string
-
-func (t TooManyCertificatesError) Error() string {
-	return string(t)
-}
-
 // CountCertificatesByNames counts, for each input domain, the number of
 // certificates issued in the given time range for that domain and its
 // subdomains. It returns a map from domains to counts, which is guaranteed to
 // contain an entry for each input domain, so long as err is nil.
-// The highest count this function can return is 10,000. If there are more
-// certificates than that matching one of the provided domain names, it will return
-// TooManyCertificatesError.
+// Queries will be run in parallel. If any of them error, only one error will
+// be returned.
 func (ssa *SQLStorageAuthority) CountCertificatesByNames(ctx context.Context, domains []string, earliest, latest time.Time) ([]*sapb.CountByNames_MapElement, error) {
-	var ret []*sapb.CountByNames_MapElement
+	work := make(chan string, len(domains))
+	type result struct {
+		err    error
+		count  int
+		domain string
+	}
+	results := make(chan result, len(domains))
 	for _, domain := range domains {
-		currentCount, err := ssa.countCertificatesByName(domain, earliest, latest)
-		if err != nil {
-			return ret, err
+		work <- domain
+	}
+	close(work)
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// We may perform up to 100 queries, depending on what's in the certificate
+	// request. Parallelize them so we don't hit our timeout, but limit the
+	// parallelism so we don't consume too many threads on the database.
+	for i := 0; i < ssa.parallelismPerRPC; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for domain := range work {
+				select {
+				case <-ctx.Done():
+					results <- result{err: ctx.Err()}
+					return
+				default:
+				}
+				currentCount, err := ssa.countCertificatesByName(domain, earliest, latest)
+				if err != nil {
+					results <- result{err: err}
+					// Skip any further work
+					cancel()
+					return
+				}
+				results <- result{
+					count:  currentCount,
+					domain: domain,
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(results)
+	var ret []*sapb.CountByNames_MapElement
+	for r := range results {
+		if r.err != nil {
+			return nil, r.err
 		}
-		name := string(domain)
-		pbCount := int64(currentCount)
+		name := string(r.domain)
+		pbCount := int64(r.count)
 		ret = append(ret, &sapb.CountByNames_MapElement{
 			Name:  &name,
 			Count: &pbCount,
@@ -378,14 +420,12 @@ const countCertificatesSelect = `
 		 SELECT serial from issuedNames
 		 WHERE (reversedName = :reversedDomain OR
 			      reversedName LIKE CONCAT(:reversedDomain, ".%"))
-		 AND notBefore > :earliest AND notBefore <= :latest
-		 LIMIT :limit;`
+		 AND notBefore > :earliest AND notBefore <= :latest;`
 
 const countCertificatesExactSelect = `
 		 SELECT serial from issuedNames
 		 WHERE reversedName = :reversedDomain
-		 AND notBefore > :earliest AND notBefore <= :latest
-		 LIMIT :limit;`
+		 AND notBefore > :earliest AND notBefore <= :latest;`
 
 // countCertificatesByNames returns, for a single domain, the count of
 // certificates issued in the given time range for that domain and its
@@ -407,13 +447,7 @@ func (ssa *SQLStorageAuthority) countCertificatesByExactName(domain string, earl
 // `countCertificatesSelect`. If the `AllowRenewalFirstRL` feature flag is set,
 // renewals of certificates issued within the same window are considered "free"
 // and are not counted.
-//
-// The highest count this function can return is 10,000. If there are more
-// certificates than that matching one of the provided domain names, it will return
-// TooManyCertificatesError.
 func (ssa *SQLStorageAuthority) countCertificates(domain string, earliest, latest time.Time, query string) (int, error) {
-	var count int64
-	const max = 10000
 	var serials []string
 	_, err := ssa.dbMap.Select(
 		&serials,
@@ -422,14 +456,11 @@ func (ssa *SQLStorageAuthority) countCertificates(domain string, earliest, lates
 			"reversedDomain": ReverseName(domain),
 			"earliest":       earliest,
 			"latest":         latest,
-			"limit":          max + 1,
 		})
 	if err == sql.ErrNoRows {
 		return 0, nil
 	} else if err != nil {
 		return 0, err
-	} else if count > max {
-		return max, TooManyCertificatesError(fmt.Sprintf("More than %d issuedName entries for %s.", max, domain))
 	}
 
 	// If the `AllowRenewalFirstRL` feature flag is enabled then do the work
@@ -1219,7 +1250,6 @@ func (ssa *SQLStorageAuthority) NewOrder(ctx context.Context, req *corepb.Order)
 	order := &orderModel{
 		RegistrationID: *req.RegistrationID,
 		Expires:        time.Unix(0, *req.Expires),
-		CSR:            req.Csr,
 		Status:         core.AcmeStatus(*req.Status),
 	}
 
@@ -1228,10 +1258,8 @@ func (ssa *SQLStorageAuthority) NewOrder(ctx context.Context, req *corepb.Order)
 		return nil, err
 	}
 
-	err = tx.Insert(order)
-	if err != nil {
-		err = Rollback(tx, err)
-		return nil, err
+	if err := tx.Insert(order); err != nil {
+		return nil, Rollback(tx, err)
 	}
 
 	for _, id := range req.Authorizations {
@@ -1239,20 +1267,92 @@ func (ssa *SQLStorageAuthority) NewOrder(ctx context.Context, req *corepb.Order)
 			OrderID: order.ID,
 			AuthzID: id,
 		}
-		err = tx.Insert(otoa)
-		if err != nil {
-			err = Rollback(tx, err)
-			return nil, err
+		if err := tx.Insert(otoa); err != nil {
+			return nil, Rollback(tx, err)
 		}
 	}
 
-	err = tx.Commit()
-	if err != nil {
+	for _, name := range req.Names {
+		reqdName := &requestedNameModel{
+			OrderID:      order.ID,
+			ReversedName: ReverseName(name),
+		}
+		if err := tx.Insert(reqdName); err != nil {
+			return nil, Rollback(tx, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
 	req.Id = &order.ID
 	return req, nil
+}
+
+// SetOrderProcessing updates a provided *corepb.Order in pending status to be
+// in processing status by updating the status field of the corresponding Order
+// table row in the DB. We avoid introducing a general purpose "Update this
+// order" RPC to ensure we have minimally permissive RPCs.
+func (ssa *SQLStorageAuthority) SetOrderProcessing(ctx context.Context, req *corepb.Order) error {
+	tx, err := ssa.dbMap.Begin()
+	if err != nil {
+		return err
+	}
+
+	result, err := tx.Exec(`
+		UPDATE orders
+		SET status = ?
+		WHERE id = ?
+		AND status = ?`,
+		string(core.StatusProcessing),
+		*req.Id,
+		string(core.StatusPending))
+	if err != nil {
+		err = berrors.InternalServerError("error updating order to processing status")
+		return Rollback(tx, err)
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil || n == 0 {
+		err = berrors.InternalServerError("no order updated to processing status")
+		return Rollback(tx, err)
+	}
+
+	return tx.Commit()
+}
+
+// FinalizeOrder finalizes a provided *corepb.Order by persisting the
+// CertificateSerial and a valid status to the database. No fields other than
+// CertificateSerial and the order ID on the provided order are processed (e.g.
+// this is not a generic update RPC).
+func (ssa *SQLStorageAuthority) FinalizeOrder(ctx context.Context, req *corepb.Order) error {
+	tx, err := ssa.dbMap.Begin()
+	if err != nil {
+		return err
+	}
+
+	result, err := tx.Exec(`
+		UPDATE orders
+		SET certificateSerial = ?, status = ?
+		WHERE id = ?
+		AND status = ?`,
+		*req.CertificateSerial,
+		string(core.StatusValid),
+		*req.Id,
+		string(core.StatusProcessing))
+	if err != nil {
+		err = berrors.InternalServerError("error updating order for finalization")
+		return Rollback(tx, err)
+	}
+
+	n, err := result.RowsAffected()
+	if err != nil || n == 0 {
+		err = berrors.InternalServerError("no order updated for finalization")
+		return Rollback(tx, err)
+	}
+
+	return tx.Commit()
 }
 
 func (ssa *SQLStorageAuthority) authzForOrder(orderID int64) ([]string, error) {
@@ -1262,6 +1362,20 @@ func (ssa *SQLStorageAuthority) authzForOrder(orderID int64) ([]string, error) {
 		return nil, err
 	}
 	return ids, nil
+}
+
+// namesForOrder finds all of the requested names associated with an order. The
+// names are returned in their reversed form (see `sa.ReverseName`).
+func (ssa *SQLStorageAuthority) namesForOrder(orderID int64) ([]string, error) {
+	var reversedNames []string
+	_, err := ssa.dbMap.Select(&reversedNames, `
+	SELECT reversedName
+	FROM requestedNames
+	WHERE orderID = ?`, orderID)
+	if err != nil {
+		return nil, err
+	}
+	return reversedNames, nil
 }
 
 // GetOrder is used to retrieve an already existing order object
@@ -1282,7 +1396,63 @@ func (ssa *SQLStorageAuthority) GetOrder(ctx context.Context, req *sapb.OrderReq
 		order.Authorizations = append(order.Authorizations, authzID)
 	}
 
+	names, err := ssa.namesForOrder(*order.Id)
+	if err != nil {
+		return nil, err
+	}
+	// The requested names are stored reversed to improve indexing performance. We
+	// need to reverse the reversed names here before giving them back to the
+	// caller.
+	reversedNames := make([]string, len(names))
+	for i, n := range names {
+		reversedNames[i] = ReverseName(n)
+	}
+	order.Names = reversedNames
+
 	return order, nil
+}
+
+// GetOrderAuthorizations is used to find the valid, unexpired authorizations
+// associated with a specific order and account ID.
+func (ssa *SQLStorageAuthority) GetOrderAuthorizations(
+	ctx context.Context,
+	req *sapb.GetOrderAuthorizationsRequest) (map[string]*core.Authorization, error) {
+	now := ssa.clk.Now()
+	// Select the full authorization data for all *valid, unexpired*
+	// authorizations that are owned by the correct account ID and associated with
+	// the given order ID
+	var auths []*core.Authorization
+	_, err := ssa.dbMap.Select(
+		&auths,
+		fmt.Sprintf(`SELECT %s FROM %s AS authz
+	LEFT JOIN orderToAuthz
+	ON authz.ID = orderToAuthz.authzID
+	WHERE authz.registrationID = ? AND
+	authz.expires > ? AND
+	authz.status = ? AND
+	orderToAuthz.orderID = ?`, authzFields, authorizationTable),
+		*req.AcctID,
+		now,
+		string(core.StatusValid),
+		*req.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collapse & dedupe the returned authorizations into a mapping from name to
+	// authorization
+	byName := make(map[string]*core.Authorization)
+	for _, auth := range auths {
+		// We only expect to get back DNS identifiers
+		if auth.Identifier.Type != core.IdentifierDNS {
+			return nil, fmt.Errorf("unknown identifier type: %q on authz id %q", auth.Identifier.Type, auth.ID)
+		}
+		existing, present := byName[auth.Identifier.Value]
+		if !present || auth.Expires.After(*existing.Expires) {
+			byName[auth.Identifier.Value] = auth
+		}
+	}
+	return byName, nil
 }
 
 func (ssa *SQLStorageAuthority) getAuthorizations(ctx context.Context, table string, status string,
