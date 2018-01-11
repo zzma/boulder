@@ -268,7 +268,7 @@ func (ra *MockRegistrationAuthority) FinalizeOrder(ctx context.Context, _ *rapb.
 
 type mockPA struct{}
 
-func (pa *mockPA) ChallengesFor(identifier core.AcmeIdentifier) (challenges []core.Challenge, combinations [][]int, err error) {
+func (pa *mockPA) ChallengesFor(identifier core.AcmeIdentifier, registrationID int64) (challenges []core.Challenge, combinations [][]int, err error) {
 	return
 }
 
@@ -278,6 +278,10 @@ func (pa *mockPA) WillingToIssue(id core.AcmeIdentifier) error {
 
 func (pa *mockPA) WillingToIssueWildcard(id core.AcmeIdentifier) error {
 	return nil
+}
+
+func (pa *mockPA) ChallengeTypeEnabled(t string, registrationID int64) bool {
+	return true
 }
 
 func makeBody(s string) io.ReadCloser {
@@ -2291,7 +2295,7 @@ func TestDeactivateRegistration(t *testing.T) {
 		  "agreement": "http://example.invalid/terms",
 		  "initialIp": "",
 		  "createdAt": "0001-01-01T00:00:00Z",
-		  "Status": "deactivated"
+		  "status": "deactivated"
 		}`)
 
 	responseWriter.Body.Reset()
@@ -2312,7 +2316,7 @@ func TestDeactivateRegistration(t *testing.T) {
 		  "agreement": "http://example.invalid/terms",
 		  "initialIp": "",
 		  "createdAt": "0001-01-01T00:00:00Z",
-		  "Status": "deactivated"
+		  "status": "deactivated"
 		}`)
 
 	key := loadPrivateKey(t, []byte(test3KeyPrivatePEM))
@@ -2402,7 +2406,7 @@ func TestKeyRollover(t *testing.T) {
 		     "agreement": "http://example.invalid/terms",
 		     "initialIp": "",
 		     "createdAt": "0001-01-01T00:00:00Z",
-		     "Status": "valid"
+		     "status": "valid"
 		   }`,
 		},
 	} {

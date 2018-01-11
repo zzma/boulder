@@ -483,7 +483,7 @@ func (ra *RegistrationAuthorityImpl) checkInvalidAuthorizationLimit(ctx context.
 	noKey := ""
 	if *count.Count >= int64(limit.GetThreshold(noKey, regID)) {
 		ra.log.Info(fmt.Sprintf("Rate limit exceeded, InvalidAuthorizationsByRegID, regID: %d", regID))
-		return berrors.RateLimitError("Too many failed authorizations recently.")
+		return berrors.RateLimitError("too many failed authorizations recently")
 	}
 	return nil
 }
@@ -532,13 +532,14 @@ func (ra *RegistrationAuthorityImpl) NewAuthorization(ctx context.Context, reque
 				ra.log.Warning(fmt.Sprintf("%s: %s", outErr.Error(), existingAuthz.ID))
 				return core.Authorization{}, outErr
 			}
-
-			// The existing authorization must not expire within the next 24 hours for
-			// it to be OK for reuse
-			reuseCutOff := ra.clk.Now().Add(time.Hour * 24)
-			if populatedAuthz.Expires.After(reuseCutOff) {
-				ra.stats.Inc("ReusedValidAuthz", 1)
-				return populatedAuthz, nil
+			if !features.Enabled(features.EnforceChallengeDisable) || ra.authzValidChallengeEnabled(&populatedAuthz) {
+				// The existing authorization must not expire within the next 24 hours for
+				// it to be OK for reuse
+				reuseCutOff := ra.clk.Now().Add(time.Hour * 24)
+				if populatedAuthz.Expires.After(reuseCutOff) {
+					ra.stats.Inc("ReusedValidAuthz", 1)
+					return populatedAuthz, nil
+				}
 			}
 		}
 	}
@@ -696,7 +697,10 @@ func (ra *RegistrationAuthorityImpl) checkAuthorizationsCAA(
 	authzs map[string]*core.Authorization,
 	regID int64,
 	now time.Time) error {
-	var badNames, recheckNames []string
+	// badNames contains the names that were unauthorized
+	var badNames []string
+	// recheckNames is a list of names that must have their CAA records rechecked
+	var recheckNames []string
 	// Per Baseline Requirements, CAA must be checked within 8 hours of issuance.
 	// CAA is checked when an authorization is validated, so as long as that was
 	// less than 8 hours ago, we're fine. If it was more than 8 hours ago
@@ -715,7 +719,11 @@ func (ra *RegistrationAuthorityImpl) checkAuthorizationsCAA(
 		} else if authz.Expires.Before(now) {
 			badNames = append(badNames, name)
 		} else if authz.Expires.Before(caaRecheckTime) {
+			// Ensure that CAA is rechecked for this name
 			recheckNames = append(recheckNames, name)
+		}
+		if authz != nil && features.Enabled(features.EnforceChallengeDisable) && !ra.authzValidChallengeEnabled(authz) {
+			return berrors.UnauthorizedError("challenge used to validate authorization with ID %q forbidden by policy", authz.ID)
 		}
 	}
 
@@ -733,6 +741,10 @@ func (ra *RegistrationAuthorityImpl) checkAuthorizationsCAA(
 	return nil
 }
 
+// recheckCAA accepts a list of of names that need to have their CAA records
+// rechecked because their associated authorizations are sufficiently old and
+// performs the CAA checks required for each. If any of the rechecks fail an
+// error is returned.
 func (ra *RegistrationAuthorityImpl) recheckCAA(ctx context.Context, names []string) error {
 	ra.stats.Inc("recheck_caa", 1)
 	ra.stats.Inc("recheck_caa_names", int64(len(names)))
@@ -1324,6 +1336,10 @@ func (ra *RegistrationAuthorityImpl) UpdateAuthorization(ctx context.Context, ba
 		// )
 	}
 
+	if features.Enabled(features.EnforceChallengeDisable) && !ra.PA.ChallengeTypeEnabled(ch.Type, authz.RegistrationID) {
+		return core.Authorization{}, berrors.MalformedError("challenge type %q no longer allowed", ch.Type)
+	}
+
 	// When configured with `reuseValidAuthz` we can expect some clients to try
 	// and update a challenge for an authorization that is already valid. In this
 	// case we don't need to process the challenge update. It wouldn't be helpful,
@@ -1576,6 +1592,24 @@ func (ra *RegistrationAuthorityImpl) NewOrder(ctx context.Context, req *rapb.New
 		}
 	}
 
+	// See if there is an existing, pending, unexpired order that can be reused
+	// for this account
+	existingOrder, err := ra.SA.GetOrderForNames(ctx, &sapb.GetOrderForNamesRequest{
+		AcctID: order.RegistrationID,
+		Names:  order.Names,
+	})
+	// If there was an error and it wasn't an acceptable "NotFound" error, return
+	// immediately
+	if err != nil && !berrors.Is(err, berrors.NotFound) {
+		return nil, err
+	}
+	// If there was an order, return it
+	if existingOrder != nil {
+		return existingOrder, nil
+	}
+	// Otherwise we were unable to find an order to reuse, continue creating a new
+	// order
+
 	// Check whether there are existing non-expired authorizations for the set of
 	// order names
 	now := ra.clk.Now().UnixNano()
@@ -1694,7 +1728,7 @@ func (ra *RegistrationAuthorityImpl) createPendingAuthz(ctx context.Context, reg
 	}
 
 	// Create challenges. The WFE will update them with URIs before sending them out.
-	challenges, combinations, err := ra.PA.ChallengesFor(identifier)
+	challenges, combinations, err := ra.PA.ChallengesFor(identifier, reg)
 	if err != nil {
 		// The only time ChallengesFor errors it is a fatal configuration error
 		// where challenges required by policy for an identifier are not enabled. We
@@ -1721,4 +1755,15 @@ func (ra *RegistrationAuthorityImpl) createPendingAuthz(ctx context.Context, reg
 	}
 	authz.Combinations = comboBytes
 	return authz, nil
+}
+
+// authzValidChallengeEnabled checks whether the valid challenge in an authorization uses a type
+// which is still enabled for given regID
+func (ra *RegistrationAuthorityImpl) authzValidChallengeEnabled(authz *core.Authorization) bool {
+	for _, chall := range authz.Challenges {
+		if chall.Status == core.StatusValid {
+			return ra.PA.ChallengeTypeEnabled(chall.Type, authz.RegistrationID)
+		}
+	}
+	return false
 }

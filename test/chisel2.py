@@ -23,11 +23,12 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 
 import OpenSSL
+import josepy
 
 from acme import challenges
 from acme import client as acme_client
+from acme import crypto_util as acme_crypto_util
 from acme import errors as acme_errors
-from acme import jose
 from acme import messages
 from acme import standalone
 
@@ -36,17 +37,23 @@ logger = logging.getLogger()
 logger.setLevel(int(os.getenv('LOGLEVEL', 0)))
 
 DIRECTORY = os.getenv('DIRECTORY', 'http://localhost:4001/directory')
+ACCEPTABLE_TOS = os.getenv('ACCEPTABLE_TOS',"https://boulder:4431/terms/v7")
+PORT = os.getenv('PORT', '5002')
+
+# URLs to control dns-test-srv
+SET_TXT = "http://localhost:8055/set-txt"
+CLEAR_TXT = "http://localhost:8055/clear-txt"
 
 def make_client(email=None):
     """Build an acme.Client and register a new account with a random key."""
-    key = jose.JWKRSA(key=rsa.generate_private_key(65537, 2048, default_backend()))
+    key = josepy.JWKRSA(key=rsa.generate_private_key(65537, 2048, default_backend()))
 
-    net = acme_client.ClientNetwork(key, verify_ssl=False,
+    net = acme_client.ClientNetwork(key, acme_version=2,
                                     user_agent="Boulder integration tester")
 
-    client = acme_client.Client(DIRECTORY, key=key, net=net)
+    client = acme_client.Client(DIRECTORY, key=key, net=net, acme_version=2)
     tos = client.directory.meta.terms_of_service
-    if tos is not None and "Do%20what%20thou%20wilt" in tos:
+    if tos == ACCEPTABLE_TOS:
         net.account = client.register(messages.NewRegistration.from_data(email=email,
             terms_of_service_agreed=True))
     else:
@@ -57,7 +64,7 @@ def get_chall(authz, typ):
     for chall_body in authz.body.challenges:
         if isinstance(chall_body.chall, typ):
             return chall_body
-    raise "No %s challenge found" % typ
+    raise Exception("No %s challenge found" % typ)
 
 class ValidationError(Exception):
     """An error that occurs during challenge validation."""
@@ -70,10 +77,10 @@ class ValidationError(Exception):
         return "%s: %s: %s" % (self.domain, self.problem_type, self.detail)
 
 def make_csr(domains):
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
-    return x509.CertificateSigningRequestBuilder().add_extension(
-        x509.SubjectAlternativeName([x509.DNSName(d) for d in domains], critical=False)
-    ).sign(key, hashes.SHA256(), default_backend()).public_bytes(serialization.Encoding.PEM)
+    key = OpenSSL.crypto.PKey()
+    key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
+    pem = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key)
+    return acme_crypto_util.make_csr(pem, domains, False)
 
 def issue(client, authzs, cert_output=None):
     """Given a list of authzs that are being processed by the server,
@@ -125,36 +132,39 @@ def auth_and_issue(domains, chall_type="http-01", email=None, cert_output=None, 
 
     if chall_type == "http-01":
         cleanup = do_http_challenges(client, authzs)
+    elif chall_type == "dns-01":
+        cleanup = do_dns_challenges(client, authzs)
     else:
         raise Exception("invalid challenge type %s" % chall_type)
 
     try:
-        while True:
-            order, response = client.poll_order(order)
-            print order.to_json()
-            if order.body.status != "pending":
-                break
-            time.sleep(1)
+        order = client.poll_order_and_request_issuance(order)
     finally:
         cleanup()
 
 def do_dns_challenges(client, authzs):
+    cleanup_hosts = []
     for a in authzs:
         c = get_chall(a, challenges.DNS01)
         name, value = (c.validation_domain_name(a.body.identifier.value),
             c.validation(client.key))
-        urllib2.urlopen("http://localhost:8055/set-txt",
+        cleanup_hosts.append(name)
+        urllib2.urlopen(SET_TXT,
             data=json.dumps({
                 "host": name + ".",
                 "value": value,
             })).read()
         client.answer_challenge(c, c.response(client.key))
     def cleanup():
-        pass
+        for host in cleanup_hosts:
+            urllib2.urlopen(CLEAR_TXT,
+                data=json.dumps({
+                    "host": host + ".",
+                })).read()
     return cleanup
 
 def do_http_challenges(client, authzs):
-    port = 5002
+    port = int(PORT)
     challs = [get_chall(a, challenges.HTTP01) for a in authzs]
     answers = set([http_01_answer(client, c) for c in challs])
     server = standalone.HTTP01Server(("", port), answers)

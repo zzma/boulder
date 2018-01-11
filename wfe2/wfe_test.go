@@ -497,7 +497,7 @@ func TestHandleFunc(t *testing.T) {
 	test.AssertEquals(t, rw.Code, http.StatusOK)
 	test.AssertEquals(t, rw.Header().Get("Access-Control-Allow-Methods"), "")
 	test.AssertEquals(t, rw.Header().Get("Access-Control-Allow-Origin"), "*")
-	test.AssertEquals(t, sortHeader(rw.Header().Get("Access-Control-Expose-Headers")), "Link, Replay-Nonce")
+	test.AssertEquals(t, sortHeader(rw.Header().Get("Access-Control-Expose-Headers")), "Link, Location, Replay-Nonce")
 
 	// CORS preflight request for disallowed method
 	runWrappedHandler(&http.Request{
@@ -525,7 +525,7 @@ func TestHandleFunc(t *testing.T) {
 	test.AssertEquals(t, rw.Header().Get("Access-Control-Allow-Origin"), "*")
 	test.AssertEquals(t, rw.Header().Get("Access-Control-Max-Age"), "86400")
 	test.AssertEquals(t, sortHeader(rw.Header().Get("Access-Control-Allow-Methods")), "GET, HEAD, POST")
-	test.AssertEquals(t, sortHeader(rw.Header().Get("Access-Control-Expose-Headers")), "Link, Replay-Nonce")
+	test.AssertEquals(t, sortHeader(rw.Header().Get("Access-Control-Expose-Headers")), "Link, Location, Replay-Nonce")
 
 	// OPTIONS request without an Origin header (i.e., not a CORS
 	// preflight request)
@@ -677,12 +677,14 @@ func TestDirectory(t *testing.T) {
 
 	// Directory with a key change endpoint and a meta entry
 	metaJSON := `{
-  "key-change": "http://localhost:4300/acme/key-change",
+  "keyChange": "http://localhost:4300/acme/key-change",
   "meta": {
-    "terms-of-service": "http://example.invalid/terms"
+    "termsOfService": "http://example.invalid/terms"
   },
-  "new-account": "http://localhost:4300/acme/new-acct",
-  "revoke-cert": "http://localhost:4300/acme/revoke-cert",
+  "newNonce": "http://localhost:4300/acme/new-nonce",
+  "newAccount": "http://localhost:4300/acme/new-acct",
+  "newOrder": "http://localhost:4300/acme/new-order",
+  "revokeCert": "http://localhost:4300/acme/revoke-cert",
   "AAAAAAAAAAA": "https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417"
 }`
 
@@ -714,21 +716,36 @@ func TestRelativeDirectory(t *testing.T) {
 	core.RandReader = fakeRand{}
 	defer func() { core.RandReader = rand.Reader }()
 
+	expectedDirectory := func(hostname string) string {
+		var expected bytes.Buffer
+
+		expected.WriteString("{")
+		expected.WriteString(fmt.Sprintf(`"keyChange":"%s/acme/key-change",`, hostname))
+		expected.WriteString(fmt.Sprintf(`"newNonce":"%s/acme/new-nonce",`, hostname))
+		expected.WriteString(fmt.Sprintf(`"newAccount":"%s/acme/new-acct",`, hostname))
+		expected.WriteString(fmt.Sprintf(`"newOrder":"%s/acme/new-order",`, hostname))
+		expected.WriteString(fmt.Sprintf(`"revokeCert":"%s/acme/revoke-cert",`, hostname))
+		expected.WriteString(`"AAAAAAAAAAA":"https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417",`)
+		expected.WriteString(`"meta":{"termsOfService":"http://example.invalid/terms"}`)
+		expected.WriteString("}")
+		return expected.String()
+	}
+
 	dirTests := []struct {
 		host        string
 		protoHeader string
 		result      string
 	}{
 		// Test '' (No host header) with no proto header
-		{"", "", `{"key-change":"http://localhost/acme/key-change","new-account":"http://localhost/acme/new-acct","revoke-cert":"http://localhost/acme/revoke-cert","AAAAAAAAAAA":"https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417","meta":{"terms-of-service": "http://example.invalid/terms"}}`},
+		{"", "", expectedDirectory("http://localhost")},
 		// Test localhost:4300 with no proto header
-		{"localhost:4300", "", `{"key-change":"http://localhost:4300/acme/key-change","new-account":"http://localhost:4300/acme/new-acct","revoke-cert":"http://localhost:4300/acme/revoke-cert","AAAAAAAAAAA":"https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417","meta":{"terms-of-service": "http://example.invalid/terms"}}`},
+		{"localhost:4300", "", expectedDirectory("http://localhost:4300")},
 		// Test 127.0.0.1:4300 with no proto header
-		{"127.0.0.1:4300", "", `{"key-change":"http://127.0.0.1:4300/acme/key-change","new-account":"http://127.0.0.1:4300/acme/new-acct","revoke-cert":"http://127.0.0.1:4300/acme/revoke-cert","AAAAAAAAAAA":"https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417","meta":{"terms-of-service": "http://example.invalid/terms"}}`},
+		{"127.0.0.1:4300", "", expectedDirectory("http://127.0.0.1:4300")},
 		// Test localhost:4300 with HTTP proto header
-		{"localhost:4300", "http", `{"key-change":"http://localhost:4300/acme/key-change","new-account":"http://localhost:4300/acme/new-acct","revoke-cert":"http://localhost:4300/acme/revoke-cert","AAAAAAAAAAA":"https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417","meta":{"terms-of-service": "http://example.invalid/terms"}}`},
+		{"localhost:4300", "http", expectedDirectory("http://localhost:4300")},
 		// Test localhost:4300 with HTTPS proto header
-		{"localhost:4300", "https", `{"key-change":"https://localhost:4300/acme/key-change","new-account":"https://localhost:4300/acme/new-acct","revoke-cert":"https://localhost:4300/acme/revoke-cert","AAAAAAAAAAA":"https://community.letsencrypt.org/t/adding-random-entries-to-the-directory/33417","meta":{"terms-of-service": "http://example.invalid/terms"}}`},
+		{"localhost:4300", "https", expectedDirectory("https://localhost:4300")},
 	}
 
 	for _, tt := range dirTests {
@@ -751,6 +768,26 @@ func TestRelativeDirectory(t *testing.T) {
 		test.AssertEquals(t, responseWriter.Code, http.StatusOK)
 		test.AssertUnmarshaledEquals(t, responseWriter.Body.String(), tt.result)
 	}
+}
+
+// TestNonceEndpoint tests the WFE2's new-nonce endpoint
+func TestNonceEndpoint(t *testing.T) {
+	wfe, _ := setupWFE(t)
+	mux := wfe.Handler()
+
+	responseWriter := httptest.NewRecorder()
+
+	mux.ServeHTTP(responseWriter, &http.Request{
+		Method: "GET",
+		URL:    mustParseURL(newNoncePath),
+	})
+
+	// Sending a GET request to the nonce endpoint should produce a HTTP response
+	// with the correct status code
+	test.AssertEquals(t, responseWriter.Code, http.StatusNoContent)
+	// And the response should contain a valid nonce in the Replay-Nonce header
+	nonce := responseWriter.Header().Get("Replay-Nonce")
+	test.AssertEquals(t, wfe.nonceService.Valid(nonce), true)
 }
 
 func TestHTTPMethods(t *testing.T) {
@@ -809,11 +846,6 @@ func TestHTTPMethods(t *testing.T) {
 			Allowed: postOnly,
 		},
 		{
-			Name:    "Terms path should be GET only",
-			Path:    termsPath,
-			Allowed: getOnly,
-		},
-		{
 			Name:    "Issuer path should be GET only",
 			Path:    issuerPath,
 			Allowed: getOnly,
@@ -837,6 +869,11 @@ func TestHTTPMethods(t *testing.T) {
 			Name:    "Order path should be GET or POST only",
 			Path:    orderPath,
 			Allowed: getOrPost,
+		},
+		{
+			Name:    "Nonce path should be GET only",
+			Path:    newNoncePath,
+			Allowed: getOnly,
 		},
 	}
 
@@ -905,7 +942,7 @@ func TestGetChallenge(t *testing.T) {
 		wfe.Challenge(ctx, newRequestEvent(), resp, req)
 		test.AssertEquals(t,
 			resp.Code,
-			http.StatusAccepted)
+			http.StatusOK)
 		test.AssertEquals(t,
 			resp.Header().Get("Location"),
 			challengeURL)
@@ -921,7 +958,7 @@ func TestGetChallenge(t *testing.T) {
 		if method == "GET" {
 			test.AssertUnmarshaledEquals(
 				t, resp.Body.String(),
-				`{"type":"dns","uri":"http://localhost/acme/challenge/valid/23"}`)
+				`{"type":"dns","url":"http://localhost/acme/challenge/valid/23"}`)
 		}
 	}
 }
@@ -941,12 +978,12 @@ func TestChallenge(t *testing.T) {
 		{
 			Name:           "Valid challenge",
 			Path:           "valid/23",
-			ExpectedStatus: http.StatusAccepted,
+			ExpectedStatus: http.StatusOK,
 			ExpectedHeaders: map[string]string{
 				"Location": "http://localhost/acme/challenge/valid/23",
 				"Link":     `<http://localhost/acme/authz/valid>;rel="up"`,
 			},
-			ExpectedBody: `{"type":"dns","uri":"http://localhost/acme/challenge/valid/23"}`,
+			ExpectedBody: `{"type":"dns","url":"http://localhost/acme/challenge/valid/23"}`,
 		},
 		{
 			Name:           "Expired challenge",
@@ -1057,7 +1094,7 @@ func TestNewECDSAAccount(t *testing.T) {
 	_, ok := key.(*ecdsa.PrivateKey)
 	test.Assert(t, ok, "Couldn't load ECDSA key")
 
-	payload := `{"contact":["mailto:person@mail.com"],"agreement":"` + agreementURL + `"}`
+	payload := `{"contact":["mailto:person@mail.com"],"termsOfServiceAgreed":true}`
 	path := newAcctPath
 	signedURL := fmt.Sprintf("http://localhost%s", path)
 	_, _, body := signRequestEmbed(t, key, signedURL, payload, wfe.nonceService)
@@ -1089,9 +1126,8 @@ func TestNewECDSAAccount(t *testing.T) {
 	// POST, Valid JSON, Key already in use
 	wfe.NewAccount(ctx, newRequestEvent(), responseWriter, request)
 	responseBody = responseWriter.Body.String()
-	test.AssertUnmarshaledEquals(t, responseBody, `{"type":"`+probs.V2ErrorNS+`malformed","detail":"Account key is already in use","status":409}`)
 	test.AssertEquals(t, responseWriter.Header().Get("Location"), "http://localhost/acme/acct/3")
-	test.AssertEquals(t, responseWriter.Code, 409)
+	test.AssertEquals(t, responseWriter.Code, 200)
 }
 
 // Test that the WFE handling of the "empty update" POST is correct. The ACME
@@ -1192,7 +1228,7 @@ func TestNewAccount(t *testing.T) {
 		},
 		{
 			makePostRequestWithPath(newAcctPath, wrongAgreementBody),
-			`{"type":"` + probs.V2ErrorNS + `malformed","detail":"Provided agreement URL [https://letsencrypt.org/im-bad] does not match current agreement URL [` + agreementURL + `]","status":400}`,
+			`{"type":"` + probs.V2ErrorNS + `malformed","detail":"must agree to terms of service","status":400}`,
 		},
 	}
 	for _, rt := range acctErrTests {
@@ -1203,7 +1239,7 @@ func TestNewAccount(t *testing.T) {
 
 	responseWriter := httptest.NewRecorder()
 
-	payload := `{"contact":["mailto:person@mail.com"],"agreement":"` + agreementURL + `"}`
+	payload := `{"contact":["mailto:person@mail.com"],"termsOfServiceAgreed":true}`
 	_, _, body := signRequestEmbed(t, key, signedURL, payload, wfe.nonceService)
 	request := makePostRequestWithPath(path, body)
 
@@ -1221,8 +1257,6 @@ func TestNewAccount(t *testing.T) {
 	test.AssertEquals(
 		t, responseWriter.Header().Get("Location"),
 		"http://localhost/acme/acct/0")
-	links := responseWriter.Header()["Link"]
-	test.AssertEquals(t, contains(links, "<"+agreementURL+">;rel=\"terms-of-service\""), true)
 
 	key = loadKey(t, []byte(test1KeyPrivatePEM))
 	_, ok = key.(*rsa.PrivateKey)
@@ -1236,13 +1270,10 @@ func TestNewAccount(t *testing.T) {
 	request = makePostRequestWithPath(path, body)
 
 	wfe.NewAccount(ctx, newRequestEvent(), responseWriter, request)
-	test.AssertUnmarshaledEquals(t,
-		responseWriter.Body.String(),
-		`{"type":"`+probs.V2ErrorNS+`malformed","detail":"Account key is already in use","status":409}`)
 	test.AssertEquals(
 		t, responseWriter.Header().Get("Location"),
 		"http://localhost/acme/acct/1")
-	test.AssertEquals(t, responseWriter.Code, 409)
+	test.AssertEquals(t, responseWriter.Code, 200)
 }
 
 func TestGetAuthorization(t *testing.T) {
@@ -1413,21 +1444,6 @@ func TestAccount(t *testing.T) {
 	responseWriter.Body.Reset()
 }
 
-func TestTermsRedirect(t *testing.T) {
-	wfe, _ := setupWFE(t)
-	responseWriter := httptest.NewRecorder()
-
-	path, _ := url.Parse("/terms")
-	wfe.Terms(ctx, newRequestEvent(), responseWriter, &http.Request{
-		Method: "GET",
-		URL:    path,
-	})
-	test.AssertEquals(
-		t, responseWriter.Header().Get("Location"),
-		agreementURL)
-	test.AssertEquals(t, responseWriter.Code, 302)
-}
-
 func TestIssuer(t *testing.T) {
 	wfe, _ := setupWFE(t)
 	wfe.IssuerCacheDuration = time.Second * 10
@@ -1450,8 +1466,7 @@ func TestGetCertificate(t *testing.T) {
 	wfe.CertNoCacheExpirationWindow = time.Hour * 24 * 7
 
 	certPemBytes, _ := ioutil.ReadFile("test/178.crt")
-	certBlock, _ := pem.Decode(certPemBytes)
-	pkixContent := "application/pkix-cert"
+	pkixContent := "application/pem-certificate-chain"
 
 	noCache := "public, max-age=0, no-cache"
 	goodSerial := "/acme/cert/0000000000000000000000000000000000b2"
@@ -1472,9 +1487,8 @@ func TestGetCertificate(t *testing.T) {
 			ExpectedStatus: http.StatusOK,
 			ExpectedHeaders: map[string]string{
 				"Content-Type": pkixContent,
-				"Link":         `<https://localhost:4000/acme/issuer-cert>;rel="up"`,
 			},
-			ExpectedCert: certBlock.Bytes,
+			ExpectedCert: certPemBytes,
 		},
 		{
 			Name:           "Unused serial, no cache",
@@ -1548,7 +1562,6 @@ func TestGetCertificateHEADHasCorrectBodyLength(t *testing.T) {
 	wfe, _ := setupWFE(t)
 
 	certPemBytes, _ := ioutil.ReadFile("test/178.crt")
-	certBlock, _ := pem.Decode(certPemBytes)
 
 	mockLog := wfe.log.(*blog.Mock)
 	mockLog.Clear()
@@ -1570,7 +1583,7 @@ func TestGetCertificateHEADHasCorrectBodyLength(t *testing.T) {
 		test.AssertNotEquals(t, err, "readall error")
 	}
 	test.AssertEquals(t, resp.StatusCode, 200)
-	test.AssertEquals(t, strconv.Itoa(len(certBlock.Bytes)), resp.Header.Get("Content-Length"))
+	test.AssertEquals(t, strconv.Itoa(len(certPemBytes)), resp.Header.Get("Content-Length"))
 	test.AssertEquals(t, 0, len(body))
 }
 
@@ -1640,7 +1653,7 @@ func TestDeactivateAuthorization(t *testing.T) {
 		  "challenges": [
 		    {
 		      "type": "dns",
-		      "uri": "http://localhost/acme/challenge/valid/23"
+		      "url": "http://localhost/acme/challenge/valid/23"
 		    }
 		  ]
 		}`)
@@ -1683,7 +1696,7 @@ func TestDeactivateAccount(t *testing.T) {
 		  "agreement": "http://example.invalid/terms",
 		  "initialIp": "",
 		  "createdAt": "0001-01-01T00:00:00Z",
-		  "Status": "deactivated"
+		  "status": "deactivated"
 		}`)
 
 	responseWriter.Body.Reset()
@@ -1706,7 +1719,7 @@ func TestDeactivateAccount(t *testing.T) {
 		  "agreement": "http://example.invalid/terms",
 		  "initialIp": "",
 		  "createdAt": "0001-01-01T00:00:00Z",
-		  "Status": "deactivated"
+		  "status": "deactivated"
 		}`)
 
 	responseWriter.Body.Reset()
@@ -1798,16 +1811,16 @@ func TestNewOrder(t *testing.T) {
 			Request: signAndPost(t, targetPath, signedURL, validOrderBody, 1, wfe.nonceService),
 			ExpectedBody: `
 					{
-						"Status": "pending",
-						"Expires": "1970-01-01T00:00:00Z",
-						"Identifiers": [
+						"status": "pending",
+						"expires": "1970-01-01T00:00:00Z",
+						"identifiers": [
 							{ "type": "dns", "value": "not-example.com"},
 							{ "type": "dns", "value": "www.not-example.com"}
 						],
-						"Authorizations": [
+						"authorizations": [
 							"http://localhost/acme/authz/hello"
 						],
-						"FinalizeURL": "http://localhost/acme/order/1/1/finalize-order"
+						"finalize": "http://localhost/acme/order/1/1/finalize-order"
 					}`,
 		},
 	}
@@ -1845,9 +1858,10 @@ func TestFinalizeOrder(t *testing.T) {
 	egUrl := mustParseURL("1/1/finalize-order")
 
 	testCases := []struct {
-		Name         string
-		Request      *http.Request
-		ExpectedBody string
+		Name            string
+		Request         *http.Request
+		ExpectedHeaders map[string]string
+		ExpectedBody    string
 	}{
 		{
 			Name: "POST, but no body",
@@ -1892,14 +1906,6 @@ func TestFinalizeOrder(t *testing.T) {
 			ExpectedBody: `{"type":"` + probs.V2ErrorNS + `malformed","detail":"No order found for account ID 2","status":404}`,
 		},
 		{
-			Name: "Account without Subscriber agreement",
-			// mocks/mocks.go's StorageAuthority's GetRegistration mock treats ID 6
-			// as an account without the agreement set. Order ID 6 is mocked to belong
-			// to it.
-			Request:      signAndPost(t, "6/6/finalize-order", "http://localhost/6/6/finalize-order", "{}", 6, wfe.nonceService),
-			ExpectedBody: `{"type":"` + probs.V2ErrorNS + `unauthorized","detail":"Must agree to subscriber agreement before any further actions","status":403}`,
-		},
-		{
 			Name:         "Order ID is invalid",
 			Request:      signAndPost(t, "1/okwhatever/finalize-order", "http://localhost/1/okwhatever/finalize-order", "{}", 1, wfe.nonceService),
 			ExpectedBody: `{"type":"` + probs.V2ErrorNS + `malformed","detail":"Invalid order ID","status":400}`,
@@ -1933,19 +1939,20 @@ func TestFinalizeOrder(t *testing.T) {
 			ExpectedBody: `{"type":"` + probs.V2ErrorNS + `malformed","detail":"Error parsing certificate request: asn1: structure error: tags don't match (16 vs {class:0 tag:0 length:16 isCompound:false}) {optional:false explicit:false application:false defaultValue:\u003cnil\u003e tag:\u003cnil\u003e stringType:0 timeType:0 set:false omitEmpty:false} certificateRequest @2","status":400}`,
 		},
 		{
-			Name:    "Good CSR",
-			Request: signAndPost(t, "1/4/finalize-order", "http://localhost/1/4/finalize-order", goodCertCSRPayload, 1, wfe.nonceService),
+			Name:            "Good CSR",
+			Request:         signAndPost(t, "1/4/finalize-order", "http://localhost/1/4/finalize-order", goodCertCSRPayload, 1, wfe.nonceService),
+			ExpectedHeaders: map[string]string{"Location": "http://localhost/acme/order/1/4"},
 			ExpectedBody: `
 {
-  "Status": "processing",
-  "Expires": "1970-01-01T00:00:00.9466848Z",
-  "Identifiers": [
+  "status": "processing",
+  "expires": "1970-01-01T00:00:00.9466848Z",
+  "identifiers": [
     {"type":"dns","value":"example.com"}
   ],
-  "Authorizations": [
+  "authorizations": [
     "http://localhost/acme/authz/hello"
   ],
-  "FinalizeURL": "http://localhost/acme/order/1/4/finalize-order"
+  "finalize": "http://localhost/acme/order/1/4/finalize-order"
 }`,
 		},
 	}
@@ -1955,6 +1962,9 @@ func TestFinalizeOrder(t *testing.T) {
 			responseWriter.Body.Reset()
 			responseWriter.HeaderMap = http.Header{}
 			wfe.Order(ctx, newRequestEvent(), responseWriter, tc.Request)
+			for k, v := range tc.ExpectedHeaders {
+				test.AssertEquals(t, responseWriter.Header().Get(k), v)
+			}
 			test.AssertUnmarshaledEquals(t, responseWriter.Body.String(), tc.ExpectedBody)
 		})
 	}
@@ -2043,7 +2053,7 @@ func TestKeyRollover(t *testing.T) {
 		     "agreement": "http://example.invalid/terms",
 		     "initialIp": "",
 		     "createdAt": "0001-01-01T00:00:00Z",
-		     "Status": "valid"
+		     "status": "valid"
 		   }`,
 			NewKey: newKey,
 		},
@@ -2076,7 +2086,7 @@ func TestOrder(t *testing.T) {
 		{
 			Name:     "Good request",
 			Path:     "1/1",
-			Response: `{"Status": "valid","Expires": "1970-01-01T00:00:00.9466848Z","Identifiers":[{"type":"dns", "value":"example.com"}], "Authorizations":["http://localhost/acme/authz/hello"],"FinalizeURL":"http://localhost/acme/order/1/1/finalize-order","Certificate":"http://localhost/acme/cert/serial"}`,
+			Response: `{"status": "valid","expires": "1970-01-01T00:00:00.9466848Z","identifiers":[{"type":"dns", "value":"example.com"}], "authorizations":["http://localhost/acme/authz/hello"],"finalize":"http://localhost/acme/order/1/1/finalize-order","certificate":"http://localhost/acme/cert/serial"}`,
 		},
 		{
 			Name:     "404 request",
@@ -2379,24 +2389,40 @@ func (sa *mockSAGetRegByKeyNotFound) GetRegistrationByKey(ctx context.Context, j
 	return core.Registration{}, berrors.NotFoundError("not found")
 }
 
-// When SA.GetRegistrationByKey returns NotFound, NewAccount should
-// succeed.
 func TestNewAccountWhenGetRegByKeyNotFound(t *testing.T) {
 	wfe, fc := setupWFE(t)
 	wfe.SA = &mockSAGetRegByKeyNotFound{mocks.NewStorageAuthority(fc)}
 	key := loadKey(t, []byte(testE2KeyPrivatePEM))
 	_, ok := key.(*ecdsa.PrivateKey)
 	test.Assert(t, ok, "Couldn't load ECDSA key")
-	payload := `{"contact":["mailto:person@mail.com"],"agreement":"` + agreementURL + `"}`
+	// When SA.GetRegistrationByKey returns NotFound, and no onlyReturnExisting
+	// field is sent, NewAccount should succeed.
+	payload := `{"contact":["mailto:person@mail.com"],"termsOfServiceAgreed":true}`
+	signedURL := "http://localhost/new-account"
 	responseWriter := httptest.NewRecorder()
-	_, _, body := signRequestEmbed(t, key, "http://localhost/new-account", payload, wfe.nonceService)
+	_, _, body := signRequestEmbed(t, key, signedURL, payload, wfe.nonceService)
 	wfe.NewAccount(ctx, newRequestEvent(), responseWriter, makePostRequestWithPath("/new-account", body))
 	if responseWriter.Code != http.StatusCreated {
 		t.Errorf("Bad response to NewRegistration: %d, %s", responseWriter.Code, responseWriter.Body)
 	}
+
+	// When SA.GetRegistrationByKey returns NotFound, and onlyReturnExisting
+	// field **is** sent, NewAccount should fail with the expected error.
+	payload = `{"contact":["mailto:person@mail.com"],"termsOfServiceAgreed":true,"onlyReturnExisting":true}`
+	responseWriter = httptest.NewRecorder()
+	_, _, body = signRequestEmbed(t, key, signedURL, payload, wfe.nonceService)
+	// Process the new account request
+	wfe.NewAccount(ctx, newRequestEvent(), responseWriter, makePostRequestWithPath("/new-account", body))
+	test.AssertEquals(t, responseWriter.Code, http.StatusBadRequest)
+	test.AssertUnmarshaledEquals(t, responseWriter.Body.String(), `
+	{
+		"type": "urn:ietf:params:acme:error:accountDoesNotExist",
+		"detail": "No account exists with the provided key",
+		"status": 400
+	}`)
 }
 
-func TestPrepAuthzForDisplayWildcard(t *testing.T) {
+func TestPrepAuthzForDisplay(t *testing.T) {
 	wfe, _ := setupWFE(t)
 
 	// Make an authz for a wildcard identifier
@@ -2411,6 +2437,7 @@ func TestPrepAuthzForDisplayWildcard(t *testing.T) {
 				Type: "dns",
 			},
 		},
+		Combinations: [][]int{{1, 2, 3}, {4}, {5, 6}},
 	}
 
 	// Prep the wildcard authz for display
@@ -2420,4 +2447,15 @@ func TestPrepAuthzForDisplayWildcard(t *testing.T) {
 	test.AssertEquals(t, strings.HasPrefix(authz.Identifier.Value, "*."), false)
 	// The authz should be marked as corresponding to a wildcard name
 	test.AssertEquals(t, authz.Wildcard, true)
+	// The authz should not have any combinations
+	// NOTE(@cpu): We don't use test.AssertNotNil here because its use of
+	// interface{} types makes a comparsion of [][]int{nil} and nil fail.
+	if authz.Combinations != nil {
+		t.Errorf("Authz had a non-nil combinations")
+	}
+
+	// We expect the authz challenge has its URL set and the URI emptied.
+	chal := authz.Challenges[0]
+	test.AssertEquals(t, chal.URL, "http://localhost/acme/challenge/12345/12345")
+	test.AssertEquals(t, chal.URI, "")
 }

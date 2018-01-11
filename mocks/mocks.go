@@ -368,6 +368,13 @@ func (sa *StorageAuthority) GetValidAuthorizations(_ context.Context, regID int6
 						Type:  "dns",
 						Value: name,
 					},
+					Challenges: []core.Challenge{
+						{
+							Status: core.StatusValid,
+							ID:     23,
+							Type:   core.ChallengeTypeDNS01,
+						},
+					},
 				}
 			}
 		}
@@ -489,6 +496,10 @@ func (sa *StorageAuthority) GetOrder(_ context.Context, req *sapb.OrderRequest) 
 	}
 
 	return validOrder, nil
+}
+
+func (sa *StorageAuthority) GetOrderForNames(_ context.Context, _ *sapb.GetOrderForNamesRequest) (*corepb.Order, error) {
+	return nil, nil
 }
 
 func (sa *StorageAuthority) GetOrderAuthorizations(_ context.Context, req *sapb.GetOrderAuthorizationsRequest) (map[string]*core.Authorization, error) {

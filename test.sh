@@ -184,8 +184,22 @@ if [[ "$RUN" =~ "integration" ]] ; then
   start_context "integration"
 
   source ${CERTBOT_PATH:-/certbot}/${VENV_NAME:-venv}/bin/activate
-  run python test/integration-test.py --chisel
+  REQUESTS_CA_BUNDLE=test/wfe-tls/minica.pem DIRECTORY=http://boulder:4000/directory \
+    run python2 test/integration-test.py --chisel
   end_context #integration
+fi
+
+if [[ "$RUN" =~ "acme-v2" ]] ; then
+  # If you're developing against a local Certbot repo, edit docker-compose.yml
+  # to mount it as a volume under /certbot, and run tests with
+  # docker-compose run -e RUN=acme-v2 -e CERTBOT_REPO=/certbot boulder ./test.sh
+  CERTBOT_REPO=${CERTBOT_REPO:-https://github.com/certbot/certbot}
+  CERTBOT_DIR=$(mktemp -d -t certbotXXXX)
+  git clone $CERTBOT_REPO $CERTBOT_DIR
+  (cd $CERTBOT_DIR ; git checkout acme-v2-integration; ./tools/venv.sh)
+  source $CERTBOT_DIR/venv/bin/activate
+  REQUESTS_CA_BUNDLE=test/wfe-tls/minica.pem DIRECTORY=https://boulder:4431/directory \
+    run python2 test/integration-test-v2.py
 fi
 
 # Run godep-restore (happens only in Travis) to check that the hashes in
