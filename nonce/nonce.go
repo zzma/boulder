@@ -13,21 +13,20 @@ import (
 	"github.com/letsencrypt/boulder/metrics"
 )
 
-// MaxUsed defines the maximum number of Nonces we're willing to hold in
+// targetSize defines the maximum number of Nonces we're willing to hold in
 // memory.
-const MaxUsed = 65536
+const targetSize = 65536
 const nonceLen = 32
 
 var errInvalidNonceLength = errors.New("invalid nonce length")
 
 // NonceService generates, cancels, and tracks Nonces.
 type NonceService struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	latest   int64
 	earliest int64
 	used     map[int64]bool
 	gcm      cipher.AEAD
-	maxUsed  int
 	stats    metrics.Scope
 }
 
@@ -48,14 +47,15 @@ func NewNonceService(scope metrics.Scope) (*NonceService, error) {
 		panic("Failure in NewGCM: " + err.Error())
 	}
 
-	return &NonceService{
+	ns := &NonceService{
 		earliest: 0,
 		latest:   0,
-		used:     make(map[int64]bool, MaxUsed),
+		used:     make(map[int64]bool, targetSize),
 		gcm:      gcm,
-		maxUsed:  MaxUsed,
 		stats:    scope,
-	}, nil
+	}
+	go ns.cull()
+	return ns, nil
 }
 
 func (ns *NonceService) encrypt(counter int64) (string, error) {
@@ -131,6 +131,27 @@ func (ns *NonceService) minUsed() int64 {
 	return min
 }
 
+// cull checks periodically whether the used map is above the target size.
+// If so, it removes the lowest entry in the map and increases the "earliest"
+// value to match.
+func (ns *NonceService) cull() {
+	for {
+		ns.mu.RLock()
+		if len(ns.used) <= targetSize {
+			ns.mu.RUnlock()
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		ns.stats.Inc("LinearScan.Full", 1)
+		earliest := ns.minUsed()
+		ns.earliest = earliest
+		ns.mu.RUnlock()
+		ns.mu.Lock()
+		delete(ns.used, ns.earliest)
+		ns.mu.Unlock()
+	}
+}
+
 // Valid determines whether the provided Nonce string is valid, returning
 // true if so.
 func (ns *NonceService) Valid(nonce string) bool {
@@ -158,11 +179,6 @@ func (ns *NonceService) Valid(nonce string) bool {
 	}
 
 	ns.used[c] = true
-	if len(ns.used) > ns.maxUsed {
-		ns.stats.Inc("LinearScan.Full", 1)
-		ns.earliest = ns.minUsed()
-		delete(ns.used, ns.earliest)
-	}
 
 	ns.stats.Inc("Valid", 1)
 	return true
