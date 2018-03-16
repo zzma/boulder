@@ -15,6 +15,7 @@ import signal
 import struct
 import sys
 import tempfile
+import threading
 import time
 import urllib2
 
@@ -147,6 +148,9 @@ def test_multidomain():
 
 def test_dns_challenge():
     auth_and_issue([random_domain(), random_domain()], chall_type="dns-01")
+
+def test_http_challenge():
+    auth_and_issue([random_domain(), random_domain()], chall_type="http-01")
 
 def test_issuer():
     """
@@ -465,8 +469,6 @@ def test_stats():
     expect_stat(8001, "\ngo_goroutines ")
 
 def test_sct_embedding():
-    if not os.environ.get('BOULDER_CONFIG_DIR', '').startswith("test/config-next"):
-        return
     certr, authzs = auth_and_issue([random_domain()])
     certBytes = urllib2.urlopen(certr.uri).read()
     cert = x509.load_der_x509_certificate(certBytes, default_backend())
@@ -548,9 +550,14 @@ def main():
     exit_status = 0
 
 def run_chisel(test_case_filter):
+    threads = []
     for key, value in globals().items():
       if callable(value) and key.startswith('test_') and re.search(test_case_filter, key):
-        value()
+        t = threading.Thread(target=value)
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
 
 def run_loadtest():
     return
