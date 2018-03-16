@@ -553,6 +553,7 @@ def run_chisel(test_case_filter):
         value()
 
 def run_loadtest():
+    return
     """Run the load generator for v1 and v2."""
     latency_data_file = "%s/integration-test-latency.json" % tempdir
     run("./bin/load-generator \
