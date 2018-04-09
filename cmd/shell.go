@@ -34,6 +34,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/net/trace"
+
 	"google.golang.org/grpc/grpclog"
 
 	cfsslLog "github.com/cloudflare/cfssl/log"
@@ -176,6 +178,13 @@ func newScope(addr string, logger blog.Logger) metrics.Scope {
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{
 		ErrorLog: promLogger{logger},
 	}))
+
+	mux.Handle("/debug/requests", http.HandlerFunc(trace.Traces))
+	mux.Handle("/debug/events", http.HandlerFunc(trace.Events))
+
+	trace.AuthRequest = func(req *http.Request) (any, sensitive bool) {
+		return true, true
+	}
 
 	server := http.Server{
 		Addr:    addr,

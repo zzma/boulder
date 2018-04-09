@@ -32,8 +32,7 @@ func (e *RequestEvent) AddError(msg string, args ...interface{}) {
 type WFEHandlerFunc func(context.Context, *RequestEvent, http.ResponseWriter, *http.Request)
 
 func (f WFEHandlerFunc) ServeHTTP(e *RequestEvent, w http.ResponseWriter, r *http.Request) {
-	ctx := context.TODO()
-	f(ctx, e, w, r)
+	f(context.Background(), e, w, r)
 }
 
 type wfeHandler interface {

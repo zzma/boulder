@@ -12,6 +12,10 @@ import (
 	bcreds "github.com/letsencrypt/boulder/grpc/creds"
 )
 
+func init() {
+	//	grpc.EnableTracing = true
+}
+
 // ClientSetup creates a gRPC TransportCredentials that presents
 // a client certificate and validates the the server certificate based
 // on the provided *tls.Config.

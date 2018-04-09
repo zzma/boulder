@@ -20,6 +20,7 @@ import (
 	"github.com/jmhodges/clock"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/context"
+	"golang.org/x/net/trace"
 	jose "gopkg.in/square/go-jose.v2"
 
 	"github.com/letsencrypt/boulder/core"
@@ -172,6 +173,10 @@ func (wfe *WebFrontEndImpl) HandleFunc(mux *http.ServeMux, pattern string, h web
 			} else {
 				logEvent.AddError("unable to make nonce: %s", err)
 			}
+
+			tr := trace.New(pattern, request.URL.Path)
+			defer tr.Finish()
+			ctx = trace.NewContext(ctx, tr)
 
 			logEvent.Endpoint = pattern
 			if request.URL != nil {
