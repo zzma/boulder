@@ -1,3 +1,4 @@
+// chill server
 package main
 
 import (
@@ -19,6 +20,7 @@ type testServer struct{}
 
 // Chill implements ChillerServer.Chill
 func (s *testServer) Chill(ctx context.Context, in *test_proto.Time) (*test_proto.Time, error) {
+	log.Printf("Got chills (%d)", *in.Time)
 	start := time.Now()
 	// Sleep for either the requested amount of time, or the context times out or
 	// is canceled.

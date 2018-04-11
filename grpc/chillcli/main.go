@@ -1,3 +1,4 @@
+// chill client
 package main
 
 import (
@@ -32,12 +33,18 @@ func main() {
 	}
 
 	c := test_proto.NewChillerClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 10000*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1000000*time.Millisecond)
 	defer cancel()
-	var second int64 = time.Second.Nanoseconds()
-	_, err = c.Chill(ctx, &test_proto.Time{Time: &second})
-	if err != nil {
-		log.Fatal(err)
+	for i := 0; i < 600; i++ {
+		go func(i int) {
+			var time int64 = (time.Duration(i) * time.Millisecond).Nanoseconds()
+			log.Printf("Sent chills (%d)", time)
+			_, err = c.Chill(ctx, &test_proto.Time{Time: &time})
+			if err != nil {
+				log.Fatal(err)
+			}
+			//log.Print("done")
+		}(i)
 	}
-	log.Print("done")
+	select {}
 }
