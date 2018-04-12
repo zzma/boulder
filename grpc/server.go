@@ -45,7 +45,11 @@ func NewServer(c *cmd.GRPCServerConfig, tls *tls.Config, serverMetrics *grpc_pro
 	}
 
 	si := &serverInterceptor{serverMetrics}
-	return grpc.NewServer(grpc.Creds(creds), grpc.UnaryInterceptor(si.intercept)), l, nil
+	return grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(si.intercept),
+		grpc.MaxConcurrentStreams(1000),
+	), l, nil
 }
 
 // NewServerMetrics constructs a *grpc_prometheus.ServerMetrics, registered with
