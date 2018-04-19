@@ -3,10 +3,13 @@ package grpc
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/resolver/manual"
 
 	"github.com/letsencrypt/boulder/cmd"
 	bcreds "github.com/letsencrypt/boulder/grpc/creds"
@@ -24,12 +27,29 @@ func ClientSetup(c *cmd.GRPCClientConfig, tls *tls.Config, clientMetrics *grpc_p
 		return nil, errNilTLS
 	}
 
+	var addresses []resolver.Address
+	for _, addr := range c.ServerAddresses {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		addresses = append(addresses, resolver.Address{
+			Addr:       addr,
+			Type:       resolver.Backend,
+			ServerName: host,
+		})
+	}
+	mr, _ := manual.GenerateAndRegisterManualResolver()
+	mr.InitialAddrs(addresses)
 	ci := clientInterceptor{c.Timeout.Duration, clientMetrics}
-	creds := bcreds.NewClientCredentials(tls.RootCAs, tls.Certificates)
+	// HACK: Just pick the first hostname as the servername. Won't work when there
+	// are multiple hostnames.
+	creds := bcreds.NewClientCredentials(tls.RootCAs, tls.Certificates, addresses[0].ServerName)
+	resolver.SetDefaultScheme(mr.Scheme())
 	return grpc.Dial(
-		"", // Since our staticResolver provides addresses we don't need to pass an address here
+		mr.Scheme()+"://nonexistent",
 		grpc.WithTransportCredentials(creds),
-		grpc.WithBalancer(grpc.RoundRobin(newStaticResolver(c.ServerAddresses))),
+		grpc.WithBalancerName("round_robin"),
 		grpc.WithUnaryInterceptor(ci.intercept),
 	)
 }

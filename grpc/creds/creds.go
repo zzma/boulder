@@ -40,26 +40,26 @@ func (e SANNotAcceptedErr) Error() string {
 type clientTransportCredentials struct {
 	roots   *x509.CertPool
 	clients []tls.Certificate
+	// The dNSName to look for when validating server certificates.
+	serverName string
 }
 
 // NewClientCredentials returns a new initialized grpc/credentials.TransportCredentials for client usage
-func NewClientCredentials(rootCAs *x509.CertPool, clientCerts []tls.Certificate) credentials.TransportCredentials {
-	return &clientTransportCredentials{rootCAs, clientCerts}
+func NewClientCredentials(
+	rootCAs *x509.CertPool,
+	clientCerts []tls.Certificate,
+	serverName string,
+) credentials.TransportCredentials {
+	return &clientTransportCredentials{rootCAs, clientCerts, serverName}
 }
 
 // ClientHandshake does the authentication handshake specified by the corresponding
 // authentication protocol on rawConn for clients. It returns the authenticated
 // connection and the corresponding auth information about the connection.
 // Implementations must use the provided context to implement timely cancellation.
-func (tc *clientTransportCredentials) ClientHandshake(ctx context.Context, addr string, rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
-	// IMPORTANT: Don't wrap the errors returned from this method. gRPC expects to be
-	// able to check err.Temporary to spot temporary errors and reconnect when they happen.
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, nil, err
-	}
+func (tc *clientTransportCredentials) ClientHandshake(ctx context.Context, serverName string, rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	conn := tls.Client(rawConn, &tls.Config{
-		ServerName:   host,
+		ServerName:   serverName,
 		RootCAs:      tc.roots,
 		Certificates: tc.clients,
 		MinVersion:   tls.VersionTLS12, // Override default of tls.VersionTLS10
@@ -92,6 +92,7 @@ func (tc *clientTransportCredentials) Info() credentials.ProtocolInfo {
 	return credentials.ProtocolInfo{
 		SecurityProtocol: "tls",
 		SecurityVersion:  "1.2", // We *only* support TLS 1.2
+		ServerName:       tc.serverName,
 	}
 }
 
@@ -107,7 +108,7 @@ func (tc *clientTransportCredentials) RequireTransportSecurity() bool {
 
 // Clone returns a copy of the clientTransportCredentials
 func (tc *clientTransportCredentials) Clone() credentials.TransportCredentials {
-	return NewClientCredentials(tc.roots, tc.clients)
+	return NewClientCredentials(tc.roots, tc.clients, tc.serverName)
 }
 
 // OverrideServerName is not implemented and here only to satisfy the interface
