@@ -44,10 +44,10 @@ func ClientSetup(c *cmd.GRPCClientConfig, tls *tls.Config, clientMetrics *grpc_p
 	ci := clientInterceptor{c.Timeout.Duration, clientMetrics}
 	// HACK: Just pick the first hostname as the servername. Won't work when there
 	// are multiple hostnames.
-	creds := bcreds.NewClientCredentials(tls.RootCAs, tls.Certificates, addresses[0].ServerName)
+	creds := bcreds.NewClientCredentials(tls.RootCAs, tls.Certificates)
 	resolver.SetDefaultScheme(mr.Scheme())
 	return grpc.Dial(
-		mr.Scheme()+"://nonexistent",
+		mr.Scheme()+"://manual-resolver-doesnt-matter/"+addresses[0].ServerName,
 		grpc.WithTransportCredentials(creds),
 		grpc.WithBalancerName("round_robin"),
 		grpc.WithUnaryInterceptor(ci.intercept),

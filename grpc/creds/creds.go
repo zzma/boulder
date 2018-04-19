@@ -40,17 +40,11 @@ func (e SANNotAcceptedErr) Error() string {
 type clientTransportCredentials struct {
 	roots   *x509.CertPool
 	clients []tls.Certificate
-	// The dNSName to look for when validating server certificates.
-	serverName string
 }
 
 // NewClientCredentials returns a new initialized grpc/credentials.TransportCredentials for client usage
-func NewClientCredentials(
-	rootCAs *x509.CertPool,
-	clientCerts []tls.Certificate,
-	serverName string,
-) credentials.TransportCredentials {
-	return &clientTransportCredentials{rootCAs, clientCerts, serverName}
+func NewClientCredentials(rootCAs *x509.CertPool, clientCerts []tls.Certificate) credentials.TransportCredentials {
+	return &clientTransportCredentials{rootCAs, clientCerts}
 }
 
 // ClientHandshake does the authentication handshake specified by the corresponding
@@ -92,7 +86,6 @@ func (tc *clientTransportCredentials) Info() credentials.ProtocolInfo {
 	return credentials.ProtocolInfo{
 		SecurityProtocol: "tls",
 		SecurityVersion:  "1.2", // We *only* support TLS 1.2
-		ServerName:       tc.serverName,
 	}
 }
 
@@ -108,7 +101,7 @@ func (tc *clientTransportCredentials) RequireTransportSecurity() bool {
 
 // Clone returns a copy of the clientTransportCredentials
 func (tc *clientTransportCredentials) Clone() credentials.TransportCredentials {
-	return NewClientCredentials(tc.roots, tc.clients, tc.serverName)
+	return NewClientCredentials(tc.roots, tc.clients)
 }
 
 // OverrideServerName is not implemented and here only to satisfy the interface
