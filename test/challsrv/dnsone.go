@@ -1,80 +1,38 @@
-package main
+package challsrv
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
 	"github.com/miekg/dns"
 )
 
-type testSrv struct {
-	mu         *sync.RWMutex
-	txtRecords map[string][]string
+func (s *ChallSrv) AddDNSOneChallenge(host, content string) {
+	s.dnsMu.Lock()
+	defer s.dnsMu.Unlock()
+	s.dnsOne[host] = append(s.dnsOne[host], content)
 }
 
-type setRequest struct {
-	Host  string `json:"host"`
-	Value string `json:"value"`
+func (s *ChallSrv) DeleteDNSOneChallenge(host string) {
+	s.dnsMu.Lock()
+	defer s.dnsMu.Unlock()
+	if _, ok := s.dnsOne[host]; ok {
+		delete(s.dnsOne, host)
+	}
 }
 
-func (ts *testSrv) setTXT(w http.ResponseWriter, r *http.Request) {
-	msg, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	var sr setRequest
-	err = json.Unmarshal(msg, &sr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if sr.Host == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	host := strings.ToLower(sr.Host)
-	ts.txtRecords[host] = append(ts.txtRecords[host], sr.Value)
-	fmt.Printf("dns-srv: added TXT record for %s containing \"%s\"\n", sr.Host, sr.Value)
-	w.WriteHeader(http.StatusOK)
+func (s *ChallSrv) GetDNSOneChallenge(host string) ([]string, bool) {
+	s.dnsMu.RLock()
+	defer s.dnsMu.RUnlock()
+	content, present := s.dnsOne[host]
+	return content, present
 }
 
-func (ts *testSrv) clearTXT(w http.ResponseWriter, r *http.Request) {
-	msg, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	var sr setRequest
-	err = json.Unmarshal(msg, &sr)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if sr.Host == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	host := strings.ToLower(sr.Host)
-	delete(ts.txtRecords, host)
-	fmt.Printf("dns-srv: added TXT record for %s containing \"%s\"\n", sr.Host, sr.Value)
-	w.WriteHeader(http.StatusOK)
-}
-
-func (ts *testSrv) dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
+func (s *ChallSrv) dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.Compress = false
@@ -114,9 +72,7 @@ func (ts *testSrv) dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 
 			m.Answer = append(m.Answer, record)
 		case dns.TypeTXT:
-			ts.mu.RLock()
-			values, present := ts.txtRecords[q.Name]
-			ts.mu.RUnlock()
+			values, present := s.GetDNSOneChallenge(q.Name)
 			if !present {
 				continue
 			}
@@ -167,48 +123,34 @@ func (ts *testSrv) dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 	return
 }
 
-type server interface {
-	ListenAndServe() error
-}
+func (srv *ChallSrv) dnsOneServer(wg *sync.WaitGroup) {
+	fmt.Printf("Starting TCP and UDP DNS-01 challenge server on %s\n", srv.dnsOneAddr)
+	dns.HandleFunc(".", srv.dnsHandler)
 
-func (ts *testSrv) serveTestResolver(dnsAddr string) {
-	dns.HandleFunc(".", ts.dnsHandler)
-	udpServer := server(&dns.Server{
-		Addr:         dnsAddr,
+	type dnsServer interface {
+		ListenAndServe() error
+	}
+
+	udpServer := dnsServer(&dns.Server{
+		Addr:         srv.dnsOneAddr,
 		Net:          "udp",
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 	})
-	tcpServer := server(&dns.Server{
-		Addr:         dnsAddr,
+	tcpServer := dnsServer(&dns.Server{
+		Addr:         srv.dnsOneAddr,
 		Net:          "tcp",
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 	})
-	for _, s := range []server{udpServer, tcpServer} {
-		go func(s server) {
+
+	wg.Done()
+	for _, s := range []dnsServer{udpServer, tcpServer} {
+		go func(s dnsServer) {
 			err := s.ListenAndServe()
 			if err != nil {
 				log.Fatal(err)
 			}
 		}(s)
 	}
-}
-
-func main() {
-	ts := testSrv{mu: new(sync.RWMutex), txtRecords: make(map[string][]string)}
-	ts.serveTestResolver("0.0.0.0:8053")
-	ts.serveTestResolver("0.0.0.0:8054")
-	webServer := server(&http.Server{
-		Addr: "0.0.0.0:8055",
-	})
-	http.HandleFunc("/set-txt", ts.setTXT)
-	http.HandleFunc("/clear-txt", ts.clearTXT)
-	go func(s server) {
-		err := s.ListenAndServe()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}(webServer)
-	cmd.CatchSignals(nil, nil)
 }
