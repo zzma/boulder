@@ -132,20 +132,20 @@ func (s *ChallSrv) dnsHandler(w dns.ResponseWriter, r *dns.Msg) {
 // server's dns handler will be registered with the `miekg/dns` package to
 // handle DNS requests. A cleanup function is returned to the caller that should
 // be used to request the clean shutdown of the HTTP server.
-func (srv *ChallSrv) dnsOneServer() func() {
-	srv.log.Printf("Starting TCP and UDP DNS-01 challenge server on %s\n", srv.dnsOneAddr)
+func (srv *ChallSrv) dnsOneServer(dnsOneAddr string) func() {
+	srv.log.Printf("Starting TCP and UDP DNS-01 challenge server on %s\n", dnsOneAddr)
 	// Register the dnsHandler
 	dns.HandleFunc(".", srv.dnsHandler)
 	// Create a UDP DNS server
 	udpServer := &dns.Server{
-		Addr:         srv.dnsOneAddr,
+		Addr:         dnsOneAddr,
 		Net:          "udp",
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
 	}
 	// Create a TCP DNS server
 	tcpServer := &dns.Server{
-		Addr:         srv.dnsOneAddr,
+		Addr:         dnsOneAddr,
 		Net:          "tcp",
 		ReadTimeout:  time.Second,
 		WriteTimeout: time.Second,
@@ -161,7 +161,7 @@ func (srv *ChallSrv) dnsOneServer() func() {
 	}
 	// Return a cleanup function that shuts down both DNS servers.
 	return func() {
-		srv.log.Printf("Shutting down DNS-01 servers on %s", srv.dnsOneAddr)
+		srv.log.Printf("Shutting down DNS-01 servers on %s", dnsOneAddr)
 		for _, s := range []*dns.Server{udpServer, tcpServer} {
 			if err := s.Shutdown(); err != nil {
 				srv.log.Printf("Err shutting down DNS-01 server: %s", err)

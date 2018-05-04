@@ -96,7 +96,8 @@ func (s *ChallSrv) Run(wg *sync.WaitGroup) {
 	// If there is a DNS-01 address configured, start a DNS-01 server
 	if s.dnsOneAddr != "" {
 		s.log.Printf("Starting DNS-01 server")
-		cleanups = append(cleanups, s.dnsOneServer())
+		cleanups = append(cleanups, s.dnsOneServer(s.dnsOneAddr))
+		cleanups = append(cleanups, s.dnsOneServer("0.0.0.0:8054"))
 	}
 
 	// Block forever waiting for a shutdown request

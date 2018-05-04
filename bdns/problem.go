@@ -23,6 +23,7 @@ func (d DNSError) Error() string {
 		if netErr, ok := d.underlying.(*net.OpError); ok {
 			if netErr.Timeout() {
 				detail = detailDNSTimeout
+				fmt.Println("DEBUG", d.underlying, netErr)
 			} else {
 				detail = detailDNSNetFailure
 			}
@@ -30,6 +31,7 @@ func (d DNSError) Error() string {
 			// happens for `*net.OpError` underlying types!
 		} else if d.underlying == context.Canceled || d.underlying == context.DeadlineExceeded {
 			detail = detailDNSTimeout
+			fmt.Println("DEBUG", d.underlying, netErr)
 		} else {
 			detail = detailServerFailure
 		}

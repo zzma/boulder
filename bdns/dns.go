@@ -336,9 +336,11 @@ func (dnsClient *DNSClientImpl) LookupTXT(ctx context.Context, hostname string) 
 	dnsType := dns.TypeTXT
 	r, err := dnsClient.exchangeOne(ctx, hostname, dnsType)
 	if err != nil {
+		fmt.Println("DEBUG, wtf", err)
 		return nil, nil, &DNSError{dnsType, hostname, err, -1}
 	}
 	if r.Rcode != dns.RcodeSuccess {
+		fmt.Println("DEBUG here>")
 		return nil, nil, &DNSError{dnsType, hostname, nil, r.Rcode}
 	}
 
