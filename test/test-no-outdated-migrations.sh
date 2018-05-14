@@ -2,6 +2,11 @@
 cd $(dirname $0)/..
 if [ ! -d .git ]; then
   echo "Not in a git repository, skipping out-of-order migration test."
+  exit 1
+fi
+if [ -n "${TRAVIS}" ]; then
+  git fetch origin master
+  git branch master FETCH_HEAD
 fi
 
 source test/db-common.sh
