@@ -164,6 +164,10 @@ func (mock caaMockDNS) LookupCAA(_ context.Context, domain string) ([]*dns.CAA, 
 	return results, nil
 }
 
+func (mock caaMockDNS) AllowedIP(_ net.IP) bool {
+	return true
+}
+
 func TestCAATimeout(t *testing.T) {
 	va, _ := setup(nil, 0)
 	va.dnsClient = caaMockDNS{}

@@ -446,14 +446,24 @@ func (va *ValidationAuthorityImpl) fetchHTTP(ctx context.Context, identifier cor
 		baseRecord.Port = strconv.Itoa(reqPort)
 		baseRecord.URL = req.URL.String()
 
-		// Resolve new hostname and construct a new dialer
-		addrs, prob := va.getAddrs(ctx, reqHost)
-		if prob != nil {
-			// Since we won't call dialer.DialContext again the parent scope
-			// will block waiting for something from dialer.addrInfoChan so
-			// we put an empty addrRecord struct in the channel.
-			dialer.addrInfoChan <- addrRecord{}
-			return prob
+		var addrs []net.IP
+		if ip := net.ParseIP(reqHost); ip != nil {
+			if !va.dnsClient.AllowedIP(ip) {
+				dialer.addrInfoChan <- addrRecord{}
+				return probs.Malformed("redirected to private IP address")
+			}
+			addrs = []net.IP{ip}
+		} else {
+			// Resolve new hostname and construct a new dialer
+			var prob *probs.ProblemDetails
+			addrs, prob = va.getAddrs(ctx, reqHost)
+			if prob != nil {
+				// Since we won't call dialer.DialContext again the parent scope
+				// will block waiting for something from dialer.addrInfoChan so
+				// we put an empty addrRecord struct in the channel.
+				dialer.addrInfoChan <- addrRecord{}
+				return prob
+			}
 		}
 		baseRecord.AddressesResolved = addrs
 		dialer = va.newHTTP01Dialer(reqHost, reqPort, addrs)

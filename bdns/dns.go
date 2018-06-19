@@ -149,6 +149,7 @@ type DNSClient interface {
 	LookupHost(context.Context, string) ([]net.IP, error)
 	LookupCAA(context.Context, string) ([]*dns.CAA, error)
 	LookupMX(context.Context, string) ([]string, error)
+	AllowedIP(net.IP) bool
 }
 
 // DNSClientImpl represents a client that talks to an external resolver
@@ -477,4 +478,12 @@ func (dnsClient *DNSClientImpl) LookupMX(ctx context.Context, hostname string) (
 	}
 
 	return results, nil
+}
+
+// AllowedIP checks that an IP is non-private
+func (dnsClient *DNSClientImpl) AllowedIP(ip net.IP) bool {
+	if ip.To4() != nil {
+		return !isPrivateV4(ip) || dnsClient.allowRestrictedAddresses
+	}
+	return !isPrivateV6(ip) || dnsClient.allowRestrictedAddresses
 }

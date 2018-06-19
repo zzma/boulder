@@ -126,3 +126,7 @@ func (mock *MockDNSClient) LookupMX(_ context.Context, domain string) ([]string,
 	}
 	return nil, nil
 }
+
+func (mock *MockDNSClient) AllowedIP(_ net.IP) bool {
+	return true
+}
