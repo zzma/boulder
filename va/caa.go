@@ -321,19 +321,21 @@ func checkAccountURI(accountURI string, accountURIPrefixes []string, accountID i
 // that is, a domain name with zero or more additional key-value parameters.
 // Returns the domain name, which may be "" (unsatisfiable), and a tag-value map of parameters.
 func extractIssuerDomainAndParameters(caa *dns.CAA) (domain string, parameters map[string]string) {
-	isIssueSpace := func(r rune) bool {
-		return r == '\t' || r == ' '
-	}
+	// WSP as defined by RFC 5234
+	// (https://tools.ietf.org/html/rfc5234#appendix-B.1) and used in RFC 6844.
+	wsp := " \t"
 
-	v := strings.SplitN(caa.Value, ";", 2)
-	domain = strings.TrimFunc(v[0], isIssueSpace)
+	// Note: We follow RFC 6844bis
+	// https://tools.ietf.org/html/draft-ietf-lamps-rfc6844bis-00 and consider
+	// parameters to be separated by semicolons.
+	valueAndParams := strings.Split(caa.Value, ";")
+	domain = strings.Trim(valueAndParams[0], wsp)
 	parameters = make(map[string]string)
 
-	if len(v) == 2 {
-		for _, s := range strings.FieldsFunc(v[1], isIssueSpace) {
-			if kv := strings.SplitN(s, "=", 2); len(kv) == 2 {
-				parameters[kv[0]] = kv[1]
-			}
+	for _, parameter := range valueAndParams[1:] {
+		parameter = strings.Trim(parameter, wsp)
+		if kv := strings.SplitN(parameter, "=", 2); len(kv) == 2 {
+			parameters[kv[0]] = kv[1]
 		}
 	}
 
