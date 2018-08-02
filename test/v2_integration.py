@@ -25,6 +25,10 @@ from acme import messages
 
 import josepy
 
+default_config_dir = os.environ.get('BOULDER_CONFIG_DIR', '')
+if default_config_dir == '':
+    default_config_dir = 'test/config'
+
 def random_domain():
     """Generate a random domain for testing (to avoid rate limiting)."""
     return "rand.%x.xyz" % random.randrange(2**32)
@@ -229,8 +233,24 @@ def test_revoke_by_issuer():
     cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, order.fullchain_pem)
     client.revoke(josepy.ComparableX509(cert), 0)
 
+def test_revoke_by_one_authz():
+    if not default_config_dir.startswith("test/config-next"):
+        return
+
+    domainA = random_domain()
+    domainB = random_domain()
+    domains = [domainA, domainB]
+    order = chisel2.auth_and_issue(domains)
+
+    # create a new client and re-authz one of the names
+    client = chisel2.make_client(None)
+    chisel2.auth_and_issue([domainA], client=client)
+
+    cert = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, order.fullchain_pem)
+    client.revoke(josepy.ComparableX509(cert), 0)
+
 def test_revoke_by_authz():
-    domains = [random_domain()]
+    domains = [random_domain(), random_domain()]
     order = chisel2.auth_and_issue(domains)
 
     # create a new client and re-authz

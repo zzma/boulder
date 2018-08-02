@@ -66,6 +66,7 @@ const (
     "n":"qih-cx32M0wq8MhhN-kBi2xPE-wnw4_iIg1hWO5wtBfpt2PtWikgPuBT6jvK9oyQwAWbSfwqlVZatMPY_-3IyytMNb9R9OatNr6o5HROBoyZnDVSiC4iMRd7bRl_PWSIqj_MjhPNa9cYwBdW5iC3jM5TaOgmp0-YFm4tkLGirDcIBDkQYlnv9NKILvuwqkapZ7XBixeqdCcikUcTRXW5unqygO6bnapzw-YtPsPPlj4Ih3SvK4doyziPV96U8u5lbNYYEzYiW1mbu9n0KLvmKDikGcdOpf6-yRa_10kMZyYQatY1eclIKI0xb54kbluEl0GQDaL5FxLmiKeVnsapzw",
     "e":"AQAB"
   }`
+	test7KeyPublicJSON = `{"kty":"RSA","n":"tHNZAm9dnfmDrmRpZzIonAMUIVt42OltzKZ2WYq2WQuB-6nMjikTg52s_R9QRO-qHxlW9krV7AoaiGZWeLJ74lCoL8PLsKw4xcAiUlhNtsj-qgbFR2apBI4q1I-hnMSiwbyV7yAzW5yvfB179yzyZgFc4j-aW8vcQyXwHY2t4jczeIIgF2QFCQnPSPk5zMtEqzT7ZX9BDcBOASjzdbWcknBqhrfo1nJ64RsFcvSA2gqijCyEe_d29YihgKahSN0eEM_LpeTAYuerZXMac_JqaHZdfQRuj7_ADgGEMdg63Wcw2wXMczf2AL23s0CMNhrIommDD6IJy5fy05gTCDou5Q","e":"AQAB"}`
 
 	agreementURL = "http://example.invalid/terms"
 )
@@ -146,6 +147,7 @@ func (sa *StorageAuthority) GetRegistrationByKey(_ context.Context, jwk *jose.JS
 	var test2KeyPublic jose.JSONWebKey
 	var test3KeyPublic jose.JSONWebKey
 	var test4KeyPublic jose.JSONWebKey
+	var test7KeyPublic jose.JSONWebKey
 	var testE1KeyPublic jose.JSONWebKey
 	var testE2KeyPublic jose.JSONWebKey
 	var err error
@@ -162,6 +164,10 @@ func (sa *StorageAuthority) GetRegistrationByKey(_ context.Context, jwk *jose.JS
 		return core.Registration{}, err
 	}
 	err = test4KeyPublic.UnmarshalJSON([]byte(test4KeyPublicJSON))
+	if err != nil {
+		return core.Registration{}, err
+	}
+	err = test7KeyPublic.UnmarshalJSON([]byte(test7KeyPublicJSON))
 	if err != nil {
 		return core.Registration{}, err
 	}
@@ -209,6 +215,15 @@ func (sa *StorageAuthority) GetRegistrationByKey(_ context.Context, jwk *jose.JS
 	if core.KeyDigestEquals(jwk, test5KeyPublic) {
 		// No key found
 		return core.Registration{ID: 5}, berrors.NotFoundError("reg not found")
+	}
+
+	if core.KeyDigestEquals(jwk, test7KeyPublic) {
+		return core.Registration{
+			ID:        7,
+			Key:       jwk,
+			Agreement: agreementURL,
+			Contact:   &contacts,
+			Status:    core.StatusValid}, nil
 	}
 
 	if core.KeyDigestEquals(jwk, testE1KeyPublic) {
@@ -397,7 +412,18 @@ func (sa *StorageAuthority) GetValidAuthorizations(_ context.Context, regID int6
 	} else if regID == 2 {
 		return map[string]*core.Authorization{}, nil
 	} else if regID == 5 || regID == 4 {
+		// RegID 5 and 4 are used by wfe/wf2 to test revocation based on account
+		// authorizations. Here we return *two* authorizations: one for each name in
+		// the certificate being revoked. This is used for the legacy tests where
+		// the OneAuthzRevocation feature flag is not enabled and authorizations for
+		// all names are required for revocation.
 		return map[string]*core.Authorization{"bad.example.com": nil, "bad2.example.com": nil}, nil
+	} else if regID == 7 {
+		// RegID 7 is used by wfe/wfe2 to test revocation based on account
+		// authorizations. Here we return only *one* authorization matching a name in
+		// the certificate being revoked. This is considered sufficient to revoke
+		// the entire certificate.
+		return map[string]*core.Authorization{"bad.example.com": nil}, nil
 	}
 	return nil, nil
 }

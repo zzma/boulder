@@ -690,6 +690,24 @@ func (wfe *WebFrontEndImpl) NewAuthorization(ctx context.Context, logEvent *web.
 	}
 }
 
+// regHoldsOneAuthorization checks that the given registration ID holds at least
+// ONE valid authorization for a name from `names`. The registration does not
+// need to have valid authorizations for ALL names. It is used when
+// features.OneAuthzRevocation is enabled.
+func (wfe *WebFrontEndImpl) regHoldsOneAuthorization(ctx context.Context, regID int64, names []string) (bool, error) {
+	authz, err := wfe.SA.GetValidAuthorizations(ctx, regID, names, wfe.clk.Now())
+	if err != nil {
+		return false, err
+	}
+	if len(authz) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+// regHoldsAuthorizations checks that the given registration ID holds
+// validauthorizations for ALL of the names from `names`. It is used when
+// features.OneAuthzRevocation is disabled.
 func (wfe *WebFrontEndImpl) regHoldsAuthorizations(ctx context.Context, regID int64, names []string) (bool, error) {
 	authz, err := wfe.SA.GetValidAuthorizations(ctx, regID, names, wfe.clk.Now())
 	if err != nil {
@@ -767,18 +785,34 @@ func (wfe *WebFrontEndImpl) RevokeCertificate(ctx context.Context, logEvent *web
 	}
 
 	if !(core.KeyDigestEquals(requestKey, parsedCertificate.PublicKey) || registration.ID == cert.RegistrationID) {
-		valid, err := wfe.regHoldsAuthorizations(ctx, registration.ID, parsedCertificate.DNSNames)
-		if err != nil {
-			wfe.sendError(response, logEvent, probs.ServerInternal("Failed to retrieve authorizations for names in certificate"), err)
-			return
-		}
-		if !valid {
-			wfe.sendError(response, logEvent,
-				probs.Unauthorized("Revocation request must be signed by private key of cert to be revoked, by the "+
-					"account key of the account that issued it, or by the account key of an account that holds valid "+
-					"authorizations for all names in the certificate."),
-				nil)
-			return
+		if features.Enabled(features.OneAuthzRevocation) {
+			valid, err := wfe.regHoldsOneAuthorization(ctx, registration.ID, parsedCertificate.DNSNames)
+			if err != nil {
+				wfe.sendError(response, logEvent, probs.ServerInternal("Failed to retrieve authorizations for names in certificate"), err)
+				return
+			}
+			if !valid {
+				wfe.sendError(response, logEvent,
+					probs.Unauthorized("Revocation request must be signed by private key of cert to be revoked, by the "+
+						"account key of the account that issued it, or by the account key of an account that holds at "+
+						"least one valid authorization for a name in the certificate."),
+					nil)
+				return
+			}
+		} else {
+			valid, err := wfe.regHoldsAuthorizations(ctx, registration.ID, parsedCertificate.DNSNames)
+			if err != nil {
+				wfe.sendError(response, logEvent, probs.ServerInternal("Failed to retrieve authorizations for names in certificate"), err)
+				return
+			}
+			if !valid {
+				wfe.sendError(response, logEvent,
+					probs.Unauthorized("Revocation request must be signed by private key of cert to be revoked, by the "+
+						"account key of the account that issued it, or by the account key of an account that holds valid "+
+						"authorizations for all names in the certificate."),
+					nil)
+				return
+			}
 		}
 	}
 

@@ -27,6 +27,7 @@ import (
 	"github.com/letsencrypt/boulder/core"
 	corepb "github.com/letsencrypt/boulder/core/proto"
 	berrors "github.com/letsencrypt/boulder/errors"
+	"github.com/letsencrypt/boulder/features"
 	"github.com/letsencrypt/boulder/goodkey"
 	blog "github.com/letsencrypt/boulder/log"
 	"github.com/letsencrypt/boulder/metrics"
@@ -2348,20 +2349,53 @@ func TestRevokeCertificateIssuingAccount(t *testing.T) {
 // Valid revocation request for existing, non-revoked cert, signed with account
 // that has authorizations for names in cert
 func TestRevokeCertificateWithAuthorizations(t *testing.T) {
+	_ = features.Set(map[string]bool{"OneAuthzRevocation": false})
+	defer features.Reset()
+
 	wfe, _ := setupWFE(t)
 	responseWriter := httptest.NewRecorder()
 	revokeRequestJSON, err := makeRevokeRequestJSON(nil)
 	test.AssertNotError(t, err, "Failed to make revokeRequestJSON")
 
 	// NOTE(@cpu): Account ID #5 is specifically handled in mocks.go
-	// GetValidAuthorizations to have the authz for the certificate used in
-	// `makeRevokeRequestJSON`
+	// GetValidAuthorizations to have an authz for every one of the names in the
+	// certificate used in `makeRevokeRequestJSON`
 	_, _, jwsBody := signRequestKeyID(t, 5, nil, "http://localhost/revoke-cert", string(revokeRequestJSON), wfe.nonceService)
 	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
 		makePostRequestWithPath("revoke-cert", jwsBody))
 
 	test.AssertEquals(t, responseWriter.Code, 200)
 	test.AssertEquals(t, responseWriter.Body.String(), "")
+}
+
+// Valid revocation request for existing, non-revoked cert, signed with account
+// that has authorizations for at least one name in cert
+func TestRevokeCertificateWithOneAuthorization(t *testing.T) {
+	_ = features.Set(map[string]bool{"OneAuthzRevocation": true})
+	defer features.Reset()
+
+	wfe, _ := setupWFE(t)
+	responseWriter := httptest.NewRecorder()
+	revokeRequestJSON, err := makeRevokeRequestJSON(nil)
+	test.AssertNotError(t, err, "Failed to make revokeRequestJSON")
+
+	// NOTE(@cpu): Account ID #7 is specifically handled in mocks.go
+	// GetValidAuthorizations to have an authz for one of the names in the
+	// certificate used in `makeRevokeRequestJSON`
+	_, _, jwsBody := signRequestKeyID(t, 7, nil, "http://localhost/revoke-cert", string(revokeRequestJSON), wfe.nonceService)
+	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
+		makePostRequestWithPath("revoke-cert", jwsBody))
+	test.AssertEquals(t, responseWriter.Code, http.StatusOK)
+	test.AssertEquals(t, responseWriter.Body.String(), "")
+
+	// NOTE(@cpu): Account ID #6 has no authorizations matching the names in the
+	// certificate used in `makeRevokeRequestJSON`
+	responseWriter = httptest.NewRecorder()
+	_, _, jwsBody = signRequestKeyID(t, 6, nil, "http://localhost/revoke-cert", string(revokeRequestJSON), wfe.nonceService)
+	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
+		makePostRequestWithPath("revoke-cert", jwsBody))
+	test.AssertEquals(t, responseWriter.Code, http.StatusForbidden)
+	test.AssertContains(t, responseWriter.Body.String(), "The key ID specified in the revocation request does not hold valid authorizations for at least one name in the certificate to be revoked")
 }
 
 // A revocation request signed by an unauthorized key.
@@ -2377,8 +2411,14 @@ func TestRevokeCertificateWrongKey(t *testing.T) {
 		makePostRequestWithPath("revoke-cert", jwsBody))
 
 	test.AssertEquals(t, responseWriter.Code, 403)
-	test.AssertUnmarshaledEquals(t, responseWriter.Body.String(),
-		`{"type":"`+probs.V2ErrorNS+`unauthorized","detail":"The key ID specified in the revocation request does not hold valid authorizations for all names in the certificate to be revoked","status":403}`)
+
+	if features.Enabled(features.OneAuthzRevocation) {
+		test.AssertUnmarshaledEquals(t, responseWriter.Body.String(),
+			`{"type":"`+probs.V2ErrorNS+`unauthorized","detail":"The key ID specified in the revocation request does not hold valid authorizations for at least one name in the certificate to be revoked","status":403}`)
+	} else {
+		test.AssertUnmarshaledEquals(t, responseWriter.Body.String(),
+			`{"type":"`+probs.V2ErrorNS+`unauthorized","detail":"The key ID specified in the revocation request does not hold valid authorizations for all names in the certificate to be revoked","status":403}`)
+	}
 }
 
 // Valid revocation request for already-revoked cert

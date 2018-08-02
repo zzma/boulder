@@ -545,11 +545,30 @@ func (wfe *WebFrontEndImpl) NewAccount(
 	}
 }
 
+// acctHoldsOneAuthorization checks that the given account ID holds at least
+// ONE valid authorization for a name from `names`. The account does not need to
+// have valid authorizations for ALL names. It is used when
+// features.OneAuthzRevocation is enabled.
+func (wfe *WebFrontEndImpl) acctHoldsOneAuthorization(ctx context.Context, acctID int64, names []string) (bool, error) {
+	authz, err := wfe.SA.GetValidAuthorizations(ctx, acctID, names, wfe.clk.Now())
+	if err != nil {
+		return false, err
+	}
+	if len(authz) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+// acctHoldsAuthorizations checks that the given account ID holds valid
+// authorizations for EVERY name from `names`. It is used when
+// features.OneAuthzRevocation is disabled.
 func (wfe *WebFrontEndImpl) acctHoldsAuthorizations(ctx context.Context, acctID int64, names []string) (bool, error) {
 	authz, err := wfe.SA.GetValidAuthorizations(ctx, acctID, names, wfe.clk.Now())
 	if err != nil {
 		return false, err
 	}
+
 	if len(names) != len(authz) {
 		return false, nil
 	}
@@ -669,8 +688,8 @@ func (wfe *WebFrontEndImpl) revokeCertByKeyID(
 		return prob
 	}
 	// For Key ID revocations we decide if an account is able to revoke a specific
-	// certificate by checking that the account has valid authorizations for all
-	// of the names in the certificate or was the issuing account
+	// certificate by checking that the account has a valid authorizations for
+	// names in the certificate or was the issuing account
 	authorizedToRevoke := func(parsedCertificate *x509.Certificate) *probs.ProblemDetails {
 		cert, err := wfe.SA.GetCertificate(ctx, core.SerialToString(parsedCertificate.SerialNumber))
 		if err != nil {
@@ -679,13 +698,26 @@ func (wfe *WebFrontEndImpl) revokeCertByKeyID(
 		if cert.RegistrationID == acct.ID {
 			return nil
 		}
-		valid, err := wfe.acctHoldsAuthorizations(ctx, acct.ID, parsedCertificate.DNSNames)
-		if err != nil {
-			return probs.ServerInternal("Failed to retrieve authorizations for names in certificate")
-		}
-		if !valid {
-			return probs.Unauthorized(
-				"The key ID specified in the revocation request does not hold valid authorizations for all names in the certificate to be revoked")
+		if features.Enabled(features.OneAuthzRevocation) {
+			valid, err := wfe.acctHoldsOneAuthorization(ctx, acct.ID, parsedCertificate.DNSNames)
+			if err != nil {
+				return probs.ServerInternal("Failed to retrieve authorizations for names in certificate")
+			}
+			if !valid {
+				return probs.Unauthorized(
+					"The key ID specified in the revocation request does not hold valid authorizations " +
+						"for at least one name in the certificate to be revoked")
+			}
+		} else {
+			valid, err := wfe.acctHoldsAuthorizations(ctx, acct.ID, parsedCertificate.DNSNames)
+			if err != nil {
+				return probs.ServerInternal("Failed to retrieve authorizations for names in certificate")
+			}
+			if !valid {
+				return probs.Unauthorized(
+					"The key ID specified in the revocation request does not hold valid authorizations " +
+						"for all names in the certificate to be revoked")
+			}
 		}
 		return nil
 	}

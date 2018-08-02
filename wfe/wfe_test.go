@@ -178,6 +178,37 @@ xxBoTncDuGtTpubGbzBrY5W1SlNm1gqu9oQa23WNViN2Rc4aIVm3
 -----END RSA PRIVATE KEY-----
 `
 
+	test7KeyPrivatePEM = `
+-----BEGIN RSA PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC0c1kCb12d+YOu
+ZGlnMiicAxQhW3jY6W3MpnZZirZZC4H7qcyOKRODnaz9H1BE76ofGVb2StXsChqI
+ZlZ4snviUKgvw8uwrDjFwCJSWE22yP6qBsVHZqkEjirUj6GcxKLBvJXvIDNbnK98
+HXv3LPJmAVziP5pby9xDJfAdja3iNzN4giAXZAUJCc9I+TnMy0SrNPtlf0ENwE4B
+KPN1tZyScGqGt+jWcnrhGwVy9IDaCqKMLIR793b1iKGApqFI3R4Qz8ul5MBi56tl
+cxpz8mpodl19BG6Pv8AOAYQx2DrdZzDbBcxzN/YAvbezQIw2GsiiaYMPognLl/LT
+mBMIOi7lAgMBAAECggEBAKVN1YhJhLUm0d571aLXbCQfHd3A8d+jVxZWl6xHSewg
+gp6MWfsQ3fOACeyHNv0vn+SFTgipXXaxesThGu3Oc3ZK9QdskbfyzL861zYf9nEv
+hzsyoJ5cCRFHOy0ltqLp7z8TBzbbhLCzxH4qdFlmL1gKf5AzO7BD/C73HhO0qknD
+RUnhHpJLiMtvq1TKW3jOgYm7AVmgkoBjk1UZmI5oY4xlMGgaReTTY7Y945pws01O
+73kI5JQJXKIr8EXVi/9hUtUJFZ+EMRFDt/L9EETg1Pjv9357qi7hp3wQvfbQws0Y
+XLxP1/PZUmXNRmfF5xwCfvytfBzJteB/uQT9JPlxaYECgYEA4911STKT3KsrLr8Z
+dySfGeLUgLyt8JIM+Q4e+46P9BK/5SuNs3P/fQrmZ+yjA7dX8c4EneQKOIVqMCTU
+dy18kY2okeJGcLKIDq/5UPAHaiI8H8KDktABw29TQDttPBgWucbevItkW7ZdydGj
+MfBWMc9AwLYsrlRCDg7fWs8DJCkCgYEAyrssmLnA8n1jUHlFXUtKtIeLBZTWG1Bv
+wWQrmLpetCDAEq4iDAsqe3wJ1HZIsoN71WWuvfYJLfJGLILoEv3Ua7yiPgrwz44J
+GMQN/mHIiggWQA4IRD4uomsIasjvEsUhWPRFinUVH7oLaelFjQY50oJCL9vur3Ws
+miBfpH7HLF0CgYEAkl+pPusJhsBBzhaeEiXpOiS24zfQ+G+pe7dxeaDboisFL/6p
+WPST00xUM8AT+4gkK0VvO8nIMwSo8OJHxYLnuUxpU8UqAKz+r4ilPDPkX248dx5p
+jL6n01ZJAULraaYDuzUf0bgtMKjWWJWdIrBDfl2nN+QOkbG4ePVezyOZ3fkCgYAr
+6ed7HaGB5U9B+0LfNpP0Dvg6OUc3m3DZv00CRDyHYCC66yVM3o5ROUkX0Jdms7x7
+OQ9k7oqGfVheA+0pT/pXbADo143aJ7Youy8czymVXLMVJPT9c0q+u9iS6PuAYVsb
+3a3ClCIDQVV/l5wNNDAKPVUA8O7+6sp8iE6vXxbdsQKBgC6NyRA7R1L/nth5M2P8
+xkQ+ITe238R9RNJGcd+nnA2XPlD72F2yzj6ko+8bL5HTpsqQ/QBuFbemLnV99Did
+4iy190Cvs30eSP7q2TXGZhreeA2buuNGrI9v3h7zBHfl5aDTc8pdmCM8G1pGMSnn
+VXcu337BIr23Ctp8k0gGcj3E
+-----END RSA PRIVATE KEY-----
+`
+
 	testE1KeyPublicJSON = `{
     "kty":"EC",
     "crv":"P-256",
@@ -1589,8 +1620,14 @@ func TestRevokeCertificateWrongKey(t *testing.T) {
 	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
 		makePostRequest(result.FullSerialize()))
 	test.AssertEquals(t, responseWriter.Code, 403)
-	test.AssertUnmarshaledEquals(t, responseWriter.Body.String(),
-		`{"type":"`+probs.V1ErrorNS+`unauthorized","detail":"Revocation request must be signed by private key of cert to be revoked, by the account key of the account that issued it, or by the account key of an account that holds valid authorizations for all names in the certificate.","status":403}`)
+
+	if features.Enabled(features.OneAuthzRevocation) {
+		test.AssertUnmarshaledEquals(t, responseWriter.Body.String(),
+			`{"type":"`+probs.V1ErrorNS+`unauthorized","detail":"Revocation request must be signed by private key of cert to be revoked, by the account key of the account that issued it, or by the account key of an account that holds at least one valid authorization for a nameO in the certificate.","status":403}`)
+	} else {
+		test.AssertUnmarshaledEquals(t, responseWriter.Body.String(),
+			`{"type":"`+probs.V1ErrorNS+`unauthorized","detail":"Revocation request must be signed by private key of cert to be revoked, by the account key of the account that issued it, or by the account key of an account that holds valid authorizations for all names in the certificate.","status":403}`)
+	}
 }
 
 // Valid revocation request for already-revoked cert
@@ -1630,7 +1667,10 @@ func TestRevokeCertificateAlreadyRevoked(t *testing.T) {
 		`{"type":"`+probs.V1ErrorNS+`malformed","detail":"Certificate already revoked","status":409}`)
 }
 
-func TestRevokeCertificateWithAuthz(t *testing.T) {
+func TestRevokeCertificateWithAuthorizations(t *testing.T) {
+	// NOTE(@cpu): Account ID #4 is specifically handled in mocks.go
+	// GetValidAuthorizations to have an authz for all of the names in the
+	// certificate used in `makeRevokeRequestJSON`
 	wfe, _ := setupWFE(t)
 	responseWriter := httptest.NewRecorder()
 	test4JWK := loadPrivateKey(t, []byte(test4KeyPrivatePEM))
@@ -1645,6 +1685,45 @@ func TestRevokeCertificateWithAuthz(t *testing.T) {
 		makePostRequest(result.FullSerialize()))
 	test.AssertEquals(t, responseWriter.Code, 200)
 	test.AssertEquals(t, responseWriter.Body.String(), "")
+}
+
+func TestRevokeCertificateWithOneAuthorization(t *testing.T) {
+	_ = features.Set(map[string]bool{"OneAuthzRevocation": true})
+	defer features.Reset()
+
+	wfe, _ := setupWFE(t)
+
+	// NOTE(@cpu): Account ID #7 is specifically handled in mocks.go
+	// GetValidAuthorizations to have an authz for one of the names in the
+	// certificate used in `makeRevokeRequestJSON`
+	responseWriter := httptest.NewRecorder()
+	test7JWK := loadPrivateKey(t, []byte(test7KeyPrivatePEM))
+	test7Key, ok := test7JWK.(*rsa.PrivateKey)
+	test.Assert(t, ok, "Couldn't load RSA key")
+	accountKeySigner := newJoseSigner(t, test7Key, wfe.nonceService)
+	revokeRequestJSON, err := makeRevokeRequestJSON(nil)
+	test.AssertNotError(t, err, "Unable to create revoke request")
+
+	responseWriter = httptest.NewRecorder()
+	result, _ := accountKeySigner.Sign(revokeRequestJSON)
+	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
+		makePostRequest(result.FullSerialize()))
+	test.AssertEquals(t, responseWriter.Code, http.StatusOK)
+	test.AssertEquals(t, responseWriter.Body.String(), "")
+
+	// NOTE(@cpu): Account ID #2 has no authorizations
+	test2JWK := loadPrivateKey(t, []byte(test2KeyPrivatePEM))
+	test2Key, ok := test2JWK.(*rsa.PrivateKey)
+	test.Assert(t, ok, "Couldn't load RSA key")
+	accountKeySigner2 := newJoseSigner(t, test2Key, wfe.nonceService)
+	test.AssertNotError(t, err, "Unable to create revoke request")
+
+	responseWriter = httptest.NewRecorder()
+	result, _ = accountKeySigner2.Sign(revokeRequestJSON)
+	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
+		makePostRequest(result.FullSerialize()))
+	test.AssertEquals(t, responseWriter.Code, http.StatusForbidden)
+	test.AssertContains(t, responseWriter.Body.String(), "or by the account key of an account that holds at least one valid authorization for a name in the certificate")
 }
 
 func TestAuthorization(t *testing.T) {
