@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/jmhodges/clock"
@@ -272,8 +273,8 @@ func (sa *StorageAuthority) RevokeAuthorizationsByDomain(_ context.Context, iden
 
 // GetCertificate is a mock
 func (sa *StorageAuthority) GetCertificate(_ context.Context, serial string) (core.Certificate, error) {
-	// Serial ee == 238.crt
-	if serial == "0000000000000000000000000000000000ee" {
+	// Serial 0x0x40e6da5711c57b13 == 238.crt
+	if strings.HasSuffix(serial, "40e6da5711c57b13") {
 		certPemBytes, _ := ioutil.ReadFile("test/238.crt")
 		certBlock, _ := pem.Decode(certPemBytes)
 		return core.Certificate{
@@ -294,8 +295,8 @@ func (sa *StorageAuthority) GetCertificate(_ context.Context, serial string) (co
 
 // GetCertificateStatus is a mock
 func (sa *StorageAuthority) GetCertificateStatus(_ context.Context, serial string) (core.CertificateStatus, error) {
-	// Serial ee == 238.crt
-	if serial == "0000000000000000000000000000000000ee" {
+	// Serial 0x0x40e6da5711c57b13 == 238.crt
+	if strings.HasSuffix(serial, "40e6da5711c57b13") {
 		return core.CertificateStatus{
 			Status: core.OCSPStatusGood,
 		}, nil
@@ -396,7 +397,7 @@ func (sa *StorageAuthority) GetValidAuthorizations(_ context.Context, regID int6
 	} else if regID == 2 {
 		return map[string]*core.Authorization{}, nil
 	} else if regID == 5 || regID == 4 {
-		return map[string]*core.Authorization{"bad.example.com": nil}, nil
+		return map[string]*core.Authorization{"bad.example.com": nil, "bad2.example.com": nil}, nil
 	}
 	return nil, nil
 }

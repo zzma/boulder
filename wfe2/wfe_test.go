@@ -2415,23 +2415,6 @@ func TestRevokeCertificateAlreadyRevoked(t *testing.T) {
 		`{"type":"`+probs.V2ErrorNS+`malformed","detail":"Certificate already revoked","status":409}`)
 }
 
-func TestRevokeCertificateWithAuthz(t *testing.T) {
-	wfe, _ := setupWFE(t)
-	responseWriter := httptest.NewRecorder()
-	test4JWK := loadKey(t, []byte(test4KeyPrivatePEM))
-	revokeRequestJSON, err := makeRevokeRequestJSON(nil)
-	test.AssertNotError(t, err, "Unable to create revoke request")
-
-	// NOTE(@cpu): Account ID #4 is specifically handled in mocks.go
-	// GetValidAuthorizations to have an authz for "bad.example.com"
-	_, _, jwsBody := signRequestKeyID(t, 4, test4JWK, "http://localhost/revoke-cert", string(revokeRequestJSON), wfe.nonceService)
-	wfe.RevokeCertificate(ctx, newRequestEvent(), responseWriter,
-		makePostRequestWithPath("revoke-cert", jwsBody))
-
-	test.AssertEquals(t, responseWriter.Code, 200)
-	test.AssertEquals(t, responseWriter.Body.String(), "")
-}
-
 type mockSAGetRegByKeyFails struct {
 	core.StorageGetter
 }
