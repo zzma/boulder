@@ -59,6 +59,7 @@ func (c *logCache) AddLog(uri, b64PK string, logger blog.Logger) (*Log, error) {
 		return log, nil
 	}
 
+	logger.Infof("adding log %q", uri)
 	// Lock the mutex for writing to add to the cache
 	c.Lock()
 	defer c.Unlock()
@@ -139,7 +140,8 @@ type ctSubmissionRequest struct {
 }
 
 type pubMetrics struct {
-	submissionLatency *prometheus.HistogramVec
+	submissionLatency  *prometheus.HistogramVec
+	submissionsStarted *prometheus.CounterVec
 }
 
 func initMetrics(stats metrics.Scope) *pubMetrics {
@@ -153,8 +155,18 @@ func initMetrics(stats metrics.Scope) *pubMetrics {
 	)
 	stats.MustRegister(submissionLatency)
 
+	submissionsStarted := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ct_submissions_started",
+			Help: "Number of submission attempts started for a given log (not counting retries)",
+		},
+		[]string{"log"},
+	)
+	stats.MustRegister(submissionsStarted)
+
 	return &pubMetrics{
-		submissionLatency: submissionLatency,
+		submissionLatency:  submissionLatency,
+		submissionsStarted: submissionsStarted,
 	}
 }
 
@@ -249,6 +261,9 @@ func (pub *Impl) singleLogSubmit(
 	}
 
 	start := time.Now()
+	pub.metrics.submissionsStarted.With(prometheus.Labels{
+		"log": ctLog.uri,
+	})
 	sct, err := submissionMethod(ctx, chain)
 	took := time.Since(start).Seconds()
 	if err != nil {
