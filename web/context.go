@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
@@ -22,9 +23,11 @@ type RequestEvent struct {
 	Contacts       *[]string `json:",omitempty"`
 	UserAgent      string    `json:",omitempty"`
 	Latency        float64
-	Code           int
-	Payload        string                 `json:",omitempty"`
-	Extra          map[string]interface{} `json:",omitempty"`
+	Code           int `json:",omitempty"`
+
+	Status  string                 `json:",omitempty"`
+	DNSName string                 `json:",omitempty"`
+	Extra   map[string]interface{} `json:",omitempty"`
 }
 
 func (e *RequestEvent) AddError(msg string, args ...interface{}) {
@@ -79,7 +82,7 @@ func (th *TopHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rwws := &responseWriterWithStatus{w, 0}
 	defer func() {
 		logEvent.Code = rwws.code
-		logEvent.Latency = float64(time.Since(begin)) / float64(time.Second)
+		logEvent.Latency = math.Round(float64(time.Since(begin))/float64(time.Second)*1000) / 1000
 		th.logEvent(logEvent)
 	}()
 	th.wfe.ServeHTTP(logEvent, rwws, r)
