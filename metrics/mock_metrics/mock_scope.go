@@ -5,11 +5,12 @@
 package mock_metrics
 
 import (
+	reflect "reflect"
+	time "time"
+
 	gomock "github.com/golang/mock/gomock"
 	metrics "github.com/letsencrypt/boulder/metrics"
 	prometheus "github.com/prometheus/client_golang/prometheus"
-	reflect "reflect"
-	time "time"
 )
 
 // MockScope is a mock of Scope interface

@@ -6,9 +6,10 @@ package mock_publisher
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	proto "github.com/letsencrypt/boulder/publisher/proto"
-	reflect "reflect"
 )
 
 // MockPublisher is a mock of Publisher interface
