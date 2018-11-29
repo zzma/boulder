@@ -27,7 +27,7 @@ type Stats struct {
 	tlsHandshakeStartCount prometheus.Counter
 	tlsHandshakeDoneCount  *prometheus.CounterVec
 	wroteHeadersCount      prometheus.Counter
-	wroteRequestCount      prometheus.Counter
+	wroteRequestCount      *prometheus.CounterVec
 }
 
 func New(scope metrics.Scope) *Stats {
@@ -76,10 +76,12 @@ func New(scope metrics.Scope) *Stats {
 			prometheus.CounterOpts{Name: "golang_http_wrote_headers",
 				Help: "times that an HTTP request wrote all its headers",
 			}),
-		wroteRequestCount: prometheus.NewCounter(
+		wroteRequestCount: prometheus.NewCounterVec(
 			prometheus.CounterOpts{Name: "golang_http_wrote_request",
 				Help: "times that an HTTP request wrote its body",
-			}),
+			},
+			[]string{"error"},
+		),
 	}
 	scope.MustRegister(result.getConnCount)
 	scope.MustRegister(result.gotConnCount)
@@ -150,8 +152,10 @@ func (s *Stats) wroteHeaders() {
 	s.wroteHeadersCount.Inc()
 }
 
-func (s *Stats) wroteRequest(_ httptrace.WroteRequestInfo) {
-	s.wroteRequestCount.Inc()
+func (s *Stats) wroteRequest(info httptrace.WroteRequestInfo) {
+	s.wroteRequestCount.With(prometheus.Labels{
+		"error": strconv.FormatBool(info.Err != nil),
+	}).Inc()
 }
 
 func WithHTTPMetrics(ctx context.Context, stats *Stats) context.Context {
