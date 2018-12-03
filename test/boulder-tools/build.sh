@@ -33,7 +33,8 @@ go get \
   github.com/modocache/gover \
   github.com/tools/godep \
   golang.org/x/tools/cover \
-  golang.org/x/tools/cmd/stringer &
+  golang.org/x/tools/cmd/stringer \
+  github.com/letsencrypt/pebble &
 
 # Wait for all the background jobs to finish, capture their error codes, then
 # if bad, exit early rather than build an incomplete image.

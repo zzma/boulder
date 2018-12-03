@@ -92,7 +92,12 @@ def start(race_detection, fakeclock=None, account_uri=None):
         # The gsb-test-srv needs to be started before the VA or its intial DB
         # update will fail and all subsequent lookups will be invalid
         [6000, 'gsb-test-srv -apikey my-voice-is-my-passport'],
-        [8053, 'challtestsrv --dns01 :8053,:8054 --management :8055 --http01 :5002 --tlsalpn01 :5001'],
+        # NOTE(@cpu): We specify explicit bind addresses for -https01 and
+        # --tlsalpn01 here to allow HTTPS HTTP-01 responses on 5001 for one
+        # interface and TLS-ALPN-01 responses on 5001 for another interface. The
+        # choice of which is used is controlled by mock DNS data added by the
+        # relevant integration tests.
+        [8053, 'pebble-challtestsrv --dns01 :8053,:8054 --management :8055 --http01 :5002 -https01 10.77.77.77:5001 --tlsalpn01 10.88.88.88:5001'],
         [8004, 'boulder-va --config %s --addr va1.boulder:9092 --debug-addr :8004' % os.path.join(default_config_dir, "va.json")],
         [8104, 'boulder-va --config %s --addr va2.boulder:9092 --debug-addr :8104' % os.path.join(default_config_dir, "va.json")],
         [8001, 'boulder-ca --config %s --ca-addr ca1.boulder:9093 --ocsp-addr ca1.boulder:9096 --debug-addr :8001' % os.path.join(default_config_dir, "ca-a.json")],

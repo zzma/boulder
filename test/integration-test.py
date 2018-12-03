@@ -45,6 +45,8 @@ class ProcInfo:
         self.cmd = cmd
         self.proc = proc
 
+challsrv_url_base = "http://localhost:8055"
+
 caa_client = None
 caa_authzs = []
 old_authzs = []
@@ -211,6 +213,14 @@ def test_http_challenge_https_redirect():
         challengePath,
         "https://{0}{1}".format(d, challengePath))
 
+    # Also add an A record for the domain pointing to the interface that the
+    # HTTPS HTTP-01 challtestsrv is bound.
+    urllib2.urlopen("{0}/add-a".format(challsrv_url_base))
+        data=json.dumps({
+            "host": d,
+            "ip": "10.77.77.77",
+        })).read()
+
     auth_and_issue([d], client=client, chall_type="http-01")
 
     remove_http_redirect(challengePath)
@@ -220,7 +230,21 @@ def test_tls_alpn_challenge():
     # by default, delete this early return.
     if not default_config_dir.startswith("test/config-next"):
         return
-    auth_and_issue([random_domain(), random_domain()], chall_type="tls-alpn-01")
+
+    # Pick two random domains
+    domains = [random_domain(), random_domain()]
+
+    # Add A records for these domains to ensure the VA's requests are directed
+    # to the interface that the challtestsrv has bound for TLS-ALPN-01 challenge
+    # responses
+    for host in domains:
+        urllib2.urlopen("{0}/add-a".format(challsrv_url_base))
+                data=json.dumps({
+                    "host": host,
+                    "ip": "10.88.88.88",
+                })).read()
+
+    auth_and_issue(domains, chall_type="tls-alpn-01")
 
 def test_issuer():
     """
@@ -636,6 +660,86 @@ def test_sct_embedding():
             raise Exception("Delta between SCT timestamp and now was too great "
                 "%s vs %s (%s)" % (sct.timestamp, datetime.datetime.now(), delta))
 
+def setup_mock_dns():
+    """
+    setup_mock_dns adds mock DNS entries to the running pebble-challtestsrv that
+    integration tests depend on.
+    """
+
+    # Set the default IPv4 address for A queries to the FAKE_DNS env var value.
+    fakeDNS = os.environ.get("FAKE_DNS")
+    default_ipv4_url = "{0}/set-default-ipv4".format(challsrv_url_base)
+    urllib2.urlopen(default_ipv4_url,
+            data=json.dumps({
+                "ip": fakeDNS,
+            })).read()
+
+    goodCAA = "happy-hacker-ca.invalid"
+    badCAA = "sad-hacker-ca.invalid"
+    accountURI = os.environ.get("ACCOUNT_URI")
+
+    # Set a good CAA policy when we're running in the past (under FAKECLOCK), otherwise
+    # deny issuance with a bad CAA policy.
+    caaRecheck = badCAA
+    if os.environ.get("FAKECLOCK") != "":
+        caaRecheck = goodCAA
+
+    caa_records = [
+        {"domain": "bad-caa-reserved.com", "value": badCAA},
+        {"domain": "good-caa-reserved.com", "value": goodCAA},
+        {"domain": "accounturi.good-caa-reserved.com", "value":"{0}; accounturi={1}".format(goodCAA, accountURI)},
+        {"domain": "recheck.good-caa-reserved.com", "value":caaRecheck},
+        {"domain": "dns-01-only.good-caa-reserved.com", "value": "{0}; validationmethods=dns-01".format(goodCAA)},
+        {"domain": "http-01-only.good-caa-reserved.com", "value": "{0}; validationmethods=http-01".format(goodCAA)},
+        {"domain": "dns-01-or-http01.good-caa-reserved.com", "value": "{0}; validationmethods=dns-01,http-01".format(goodCAA)},
+    ]
+    set_caa_url  = "{0}/add-caa".format(challsrv_url_base)
+    for policy in caa_records:
+        urllib2.urlopen(set_caa_url,
+                data=json.dumps({
+                    "host": policy["domain"],
+                    "policy": {
+                        "tag": "issue",
+                        "value": policy["value"],
+                    },
+                })).read()
+
+def test_single_ocsp():
+    """Run the single-ocsp command, which is used to generate OCSP responses for
+       intermediate certificates on a manual basis. Then start up an
+       ocsp-responder configured to respond using the output of single-ocsp,
+       check that it successfully answers OCSP requests, and shut the responder
+       back down.
+    """
+    run("./bin/single-ocsp -issuer test/test-root.pem \
+            -responder test/test-root.pem \
+            -target test/test-ca2.pem \
+            -pkcs11 test/test-root.key-pkcs11.json \
+            -thisUpdate 2016-09-02T00:00:00Z \
+            -nextUpdate 2020-09-02T00:00:00Z \
+            -status 0 \
+            -out /tmp/issuer-ocsp-responses.txt")
+
+    p = subprocess.Popen(
+        './bin/ocsp-responder --config test/issuer-ocsp-responder.json', shell=True)
+
+    # Verify that the static OCSP responder, which answers with a
+    # pre-signed, long-lived response for the CA cert, works.
+    wait_for_ocsp_good("test/test-ca2.pem", "test/test-root.pem", "http://localhost:4003")
+
+    p.send_signal(signal.SIGTERM)
+    p.wait()
+
+def 
+
+    urllib2.urlopen(,
+            data=json.dumps({
+                "path": path,
+                "targetURL": targetURL,
+            })).read()
+
+    pass
+
 exit_status = 1
 tempdir = tempfile.mkdtemp()
 
@@ -659,6 +763,8 @@ def main():
     parser.set_defaults(run_all=False, run_certbot=False, run_chisel=False,
         run_loadtest=False, test_case_filter="", skip_setup=False)
     args = parser.parse_args()
+
+    setup_mock_dns()
 
     if not (args.run_all or args.run_certbot or args.run_chisel or args.run_loadtest or args.custom is not None):
         raise Exception("must run at least one of the letsencrypt or chisel tests with --all, --certbot, --chisel, --load or --custom")
