@@ -691,7 +691,9 @@ def main():
     print("travis_fold:end:integration_setup")
 
     if args.run_all or args.run_chisel:
+        print("travis_fold:start:chisel")
         run_chisel(args.test_case_filter)
+        print("travis_fold:end:chisel")
 
     if args.run_all or args.run_certbot:
         run_client_tests()
