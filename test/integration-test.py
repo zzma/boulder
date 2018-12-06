@@ -663,6 +663,7 @@ def main():
     if not (args.run_all or args.run_certbot or args.run_chisel or args.run_loadtest or args.custom is not None):
         raise Exception("must run at least one of the letsencrypt or chisel tests with --all, --certbot, --chisel, --load or --custom")
 
+    print("travis_fold:start:integration_setup")
     if not args.skip_setup:
         now = datetime.datetime.utcnow()
         seventy_days_ago = now+datetime.timedelta(days=-70)
@@ -687,6 +688,8 @@ def main():
     if not args.skip_setup:
         setup_zero_days_ago()
 
+    print("travis_fold:end:integration_setup")
+
     if args.run_all or args.run_chisel:
         run_chisel(args.test_case_filter)
 
@@ -694,7 +697,9 @@ def main():
         run_client_tests()
 
     if args.run_all or args.run_loadtest:
+        print("travis_fold:start:load_generator")
         run_loadtest()
+        print("travis_fold:end:load_generator")
 
     if args.custom:
         run(args.custom)
