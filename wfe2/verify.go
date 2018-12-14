@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -271,29 +272,56 @@ func (wfe *WebFrontEndImpl) parseJWS(body []byte) (*jose.JSONWebSignature, *prob
 	// Parse the raw JWS JSON to check that:
 	// * the unprotected Header field is not being used.
 	// * the "signatures" member isn't present, just "signature".
+	// * the "jwk" field of the Protected header, if present, uses correct ECDSA padding.
 	//
 	// This must be done prior to `jose.parseSigned` since it will strip away
 	// these headers.
-	var unprotected struct {
+	var jwsBody struct {
+		Protected  string
 		Header     map[string]string
 		Signatures []interface{}
 	}
-	if err := json.Unmarshal(body, &unprotected); err != nil {
+	if err := json.Unmarshal(body, &jwsBody); err != nil {
 		wfe.stats.joseErrorCount.With(prometheus.Labels{"type": "JWSUnmarshalFailed"}).Inc()
 		return nil, probs.Malformed("Parse error reading JWS")
 	}
 
 	// ACME v2 never uses values from the unprotected JWS header. Reject JWS that
 	// include unprotected headers.
-	if unprotected.Header != nil {
+	if jwsBody.Header != nil {
 		wfe.stats.joseErrorCount.With(prometheus.Labels{"type": "JWSUnprotectedHeaders"}).Inc()
 		return nil, probs.Malformed(
 			`JWS "header" field not allowed. All headers must be in "protected" field`)
 	}
 
+	if !features.Enabled(features.CheckECDSAPadding) {
+		protectedBytes, err := base64.RawURLEncoding.DecodeString(jwsBody.Protected)
+		if err != nil {
+			return nil, probs.Malformed("Parse error reading JWS protected header")
+		}
+		type protectedHeader struct {
+			JWK struct {
+				Crv string
+				X   string
+				Y   string
+			}
+		}
+		var ph protectedHeader
+		err = json.Unmarshal(protectedBytes, &ph)
+		if err != nil {
+			return nil, probs.Malformed("Error marshaling protected header bytes into struct")
+		}
+		if ph.JWK.Crv == "P-256" && (len(ph.JWK.X) != 43 || len(ph.JWK.Y) != 43) {
+			return nil, probs.Malformed("Incorrect length for x or y value of JWK public key.")
+		}
+		if ph.JWK.Crv == "P-384" && (len(ph.JWK.X) != 64 || len(ph.JWK.Y) != 64) {
+			return nil, probs.Malformed("Incorrect length for x or y value of JWK public key.")
+		}
+	}
+
 	// ACME v2 never uses the "signatures" array of JSON serialized JWS, just the
 	// mandatory "signature" field. Reject JWS that include the "signatures" array.
-	if len(unprotected.Signatures) > 0 {
+	if len(jwsBody.Signatures) > 0 {
 		wfe.stats.joseErrorCount.With(prometheus.Labels{"type": "JWSMultiSig"}).Inc()
 		return nil, probs.Malformed(
 			`JWS "signatures" field not allowed. Only the "signature" field should contain a signature`)

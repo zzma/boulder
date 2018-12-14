@@ -44,6 +44,9 @@ const (
 	// PerformValidationRPC enables the WFE/WFE2 to use the RA's PerformValidation
 	// RPC instead of the deprecated UpdateAuthorization RPC.
 	PerformValidationRPC
+	// Ensure ECDSA JWKs are correctly padded per
+	// https://github.com/letsencrypt/boulder/issues/3964
+	CheckECDSAPadding
 )
 
 // List of features and their default value, protected by fMu
@@ -70,6 +73,7 @@ var features = map[FeatureFlag]bool{
 	ProbeCTLogs:                 false,
 	SimplifiedVAHTTP:            false,
 	PerformValidationRPC:        false,
+	CheckECDSAPadding:           false,
 }
 
 var fMu = new(sync.RWMutex)
