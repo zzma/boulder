@@ -114,7 +114,14 @@ func (log *SQLLogger) Printf(format string, v ...interface{}) {
 func ReportDbConnCount(dbMap *gorp.DbMap, statter metrics.Scope) {
 	db := dbMap.Db
 	for {
-		statter.Gauge("OpenConnections", int64(db.Stats().OpenConnections))
+		dbStats := db.Stats()
+		statter.Gauge("OpenConnections", int64(dbStats.OpenConnections))
+		statter.Gauge("InUse", int64(dbStats.InUse))
+		statter.Gauge("Idle", int64(dbStats.Idle))
+		statter.Gauge("WaitCount", dbStats.WaitCount)
+		statter.TimingDuration("WaitDuration", dbStats.WaitDuration)
+		statter.Gauge("MaxIdleClosed", dbStats.MaxIdleClosed)
+		statter.Gauge("MaxLifetimeClosed", dbStats.MaxLifetimeClosed)
 		time.Sleep(1 * time.Second)
 	}
 }
