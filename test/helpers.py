@@ -3,6 +3,7 @@ import base64
 import os
 import urllib2
 import time
+import random
 import re
 import requests
 import tempfile
@@ -15,6 +16,20 @@ tempdir = tempfile.mkdtemp()
 @atexit.register
 def stop():
     shutil.rmtree(tempdir)
+
+default_config_dir = os.environ.get('BOULDER_CONFIG_DIR', '')
+if default_config_dir == '':
+    default_config_dir = 'test/config'
+
+def fakeclock(date):
+    return date.strftime("%a %b %d %H:%M:%S UTC %Y")
+
+def get_future_output(cmd, date):
+    return run(cmd, env={'FAKECLOCK': fakeclock(date)})
+
+def random_domain():
+    """Generate a random domain for testing (to avoid rate limiting)."""
+    return "rand.%x.xyz" % random.randrange(2**32)
 
 def run(cmd, **kwargs):
     return subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, **kwargs)

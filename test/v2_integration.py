@@ -3,7 +3,6 @@
 """
 Integration test cases for ACMEv2 as implemented by boulder-wfe2.
 """
-import random
 import subprocess
 import requests
 import datetime
@@ -40,20 +39,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import challtestsrv
 challSrv = challtestsrv.ChallTestServer()
-
-tempdir = tempfile.mkdtemp()
-
-default_config_dir = os.environ.get('BOULDER_CONFIG_DIR', '')
-if default_config_dir == '':
-    default_config_dir = 'test/config'
-
-@atexit.register
-def stop():
-    shutil.rmtree(tempdir)
-
-def random_domain():
-    """Generate a random domain for testing (to avoid rate limiting)."""
-    return "rand.%x.xyz" % random.randrange(2**32)
 
 def test_multidomain():
     chisel2.auth_and_issue([random_domain(), random_domain()])
