@@ -439,19 +439,23 @@
 		},
 		{
 			"ImportPath": "golang.org/x/text/secure/bidirule",
-			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
+			"Comment": "v0.3.0",
+			"Rev": "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
 		},
 		{
 			"ImportPath": "golang.org/x/text/transform",
-			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
+			"Comment": "v0.3.0",
+			"Rev": "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
 		},
 		{
 			"ImportPath": "golang.org/x/text/unicode/bidi",
-			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
+			"Comment": "v0.3.0",
+			"Rev": "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
 		},
 		{
 			"ImportPath": "golang.org/x/text/unicode/norm",
-			"Rev": "9e2f80a6ba7ed4ba13e0cd4b1f094bf916875735"
+			"Comment": "v0.3.0",
+			"Rev": "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
 		},
 		{
 			"ImportPath": "google.golang.org/genproto/googleapis/rpc/status",
