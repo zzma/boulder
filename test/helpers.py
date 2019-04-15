@@ -21,6 +21,7 @@ def stop():
 default_config_dir = os.environ.get('BOULDER_CONFIG_DIR', '')
 if default_config_dir == '':
     default_config_dir = 'test/config'
+CONFIG_NEXT = default_config_dir.startswith("test/config-next")
 
 def fakeclock(date):
     return date.strftime("%a %b %d %H:%M:%S UTC %Y")
