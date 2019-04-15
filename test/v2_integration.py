@@ -281,7 +281,7 @@ def test_http_challenge_https_redirect():
         raise Exception("Expected all redirected requests to be HTTPS")
       # TODO(@cpu): The following ServerName test will fail with config-next
       # until https://github.com/letsencrypt/boulder/issues/3969 is fixed.
-      if default_config_dir.startswith("test/config-next"):
+      if CONFIG_NEXT:
         return
       elif r['ServerName'] != d:
         raise Exception("Expected all redirected requests to have ServerName {0} got \"{1}\"".format(d, r['ServerName']))
@@ -470,10 +470,7 @@ def test_revoke_by_issuer():
         f.write(OpenSSL.crypto.dump_certificate(
             OpenSSL.crypto.FILETYPE_PEM, cert).decode())
     ee_ocsp_url = "http://localhost:4002"
-    if default_config_dir.startswith("test/config-next"):
-        verify_revocation(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
-    else:
-        wait_for_ocsp_revoked(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
+    verify_revocation(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
     verify_akamai_purge()
 
 def test_revoke_by_authz():
@@ -493,10 +490,7 @@ def test_revoke_by_authz():
         f.write(OpenSSL.crypto.dump_certificate(
             OpenSSL.crypto.FILETYPE_PEM, cert).decode())
     ee_ocsp_url = "http://localhost:4002"
-    if default_config_dir.startswith("test/config-next"):
-        verify_revocation(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
-    else:
-        wait_for_ocsp_revoked(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
+    verify_revocation(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
     verify_akamai_purge()
 
 def test_revoke_by_privkey():
@@ -529,15 +523,10 @@ def test_revoke_by_privkey():
         f.write(OpenSSL.crypto.dump_certificate(
             OpenSSL.crypto.FILETYPE_PEM, cert).decode())
     ee_ocsp_url = "http://localhost:4002"
-    if default_config_dir.startswith("test/config-next"):
-        verify_revocation(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
-    else:
-        wait_for_ocsp_revoked(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
+    verify_revocation(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
     verify_akamai_purge()
 
 def test_sct_embedding():
-    if not os.environ.get('BOULDER_CONFIG_DIR', '').startswith("test/config-next"):
-        return
     order = chisel2.auth_and_issue([random_domain()])
     cert = x509.load_pem_x509_certificate(str(order.fullchain_pem), default_backend())
 
@@ -704,7 +693,7 @@ def multiva_setup(client, bounceFirst=1):
 def test_http_multiva_threshold_pass():
     # Only config-next has remote VAs configured and is appropriate for this
     # integration test.
-    if not default_config_dir.startswith("test/config-next"):
+    if not CONFIG_NEXT:
         return
 
     client = chisel2.make_client()
@@ -728,7 +717,7 @@ def test_http_multiva_threshold_pass():
 def test_http_multiva_threshold_fail():
     # Only config-next has remote VAs configured and is appropriate for this
     # integration test.
-    if not default_config_dir.startswith("test/config-next"):
+    if not CONFIG_NEXT:
         return
 
     client = chisel2.make_client()

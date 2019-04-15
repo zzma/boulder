@@ -10,12 +10,10 @@ import json
 import os
 import re
 import requests
-import shutil
 import subprocess
 import signal
 import struct
 import sys
-import tempfile
 import time
 import urllib2
 
@@ -227,15 +225,22 @@ def main():
     if args.run_all or args.run_certbot:
         run_client_tests()
 
-    if args.run_all or args.run_loadtest:
-        run_loadtest()
-
     if args.custom:
         run(args.custom)
 
     run_cert_checker()
-    check_balance()
+    # Skip load-balancing check when test case filter is on, since that usually
+    # means there's a single issuance and we don't expect every RPC backend to get
+    # traffic.
+    if not args.test_case_filter:
+        check_balance()
     run_expired_authz_purger()
+
+    # Run the load-generator last. run_loadtest will stop the
+    # pebble-challtestsrv before running the load-generator and will not restart
+    # it.
+    if args.run_all or args.run_loadtest:
+        run_loadtest()
 
     if not startservers.check():
         raise Exception("startservers.check failed")
@@ -257,6 +262,13 @@ def run_chisel(test_case_filter):
 def run_loadtest():
     """Run the ACME v2 load generator."""
     latency_data_file = "%s/integration-test-latency.json" % tempdir
+
+    # Stop the global pebble-challtestsrv - it will conflict with the
+    # load-generator's internal challtestsrv. We don't restart it because
+    # run_loadtest() is called last and there are no remaining tests to run that
+    # might benefit from the pebble-challtestsrv being restarted.
+    startservers.stopChallSrv()
+
     run("./bin/load-generator \
             -config test/load-generator/config/integration-test-config.json\
             -results %s" % latency_data_file)
@@ -296,7 +308,6 @@ if __name__ == "__main__":
 
 @atexit.register
 def stop():
-    import shutil
     if exit_status == 0:
         print("\n\nSUCCESS")
     else:
