@@ -377,44 +377,6 @@ def test_ocsp():
     # checking OCSP until we either see a good response or we timeout (5s).
     wait_for_ocsp_good(cert_file_pem, "test/test-ca2.pem", ee_ocsp_url)
 
-def test_ct_submission():
-    # When testing config-next we use a mismatching set of CT logs in the boulder-publisher
-    # and ocsp-updater configuration files. The ocsp-updater config has an extra log which the
-    # publisher does not. When the publisher does the initial submission it will only submit
-    # the certificate to a single log, when the ocsp-updater then runs looking for missing SCTs
-    # it will think we failed to retrieve an SCT for the extra log it is configured with and
-    # attempt to submit it to just that log instead of all of the logs it knows about (which
-    # is just the one it already has submitted to).
-    url_a = "http://boulder:4500/submissions"
-    url_b = "http://boulder:4501/submissions"
-    submissions_a = urllib2.urlopen(url_a).read()
-    submissions_b = urllib2.urlopen(url_b).read()
-    expected_a_submissions = int(submissions_a)+1
-    expected_b_submissions = int(submissions_b)+1
-    auth_and_issue([random_domain()])
-    submissions_a = urllib2.urlopen(url_a).read()
-    # Presently the CA and the ocsp-updater can race on the initial submission
-    # of a certificate to the configured logs. This results in over submitting
-    # certificates. This is expected to be fixed in the future by a planned
-    # redesign so for now we do not error when the number of submissions falls
-    # between the expected value and two times the expected. See Boulder #2610
-    # for more information: https://github.com/letsencrypt/boulder/issues/2610
-    if (int(submissions_a) < expected_a_submissions or
-        int(submissions_a) > 2 * expected_a_submissions):
-        raise Exception("Expected %d CT submissions to boulder:4500, found %s" % (expected_a_submissions, submissions_a))
-    for _ in range(0, 10):
-        submissions_a = urllib2.urlopen(url_a).read()
-        submissions_b = urllib2.urlopen(url_b).read()
-        if (int(submissions_a) < expected_a_submissions or
-            int(submissions_a) > 2 * expected_a_submissions):
-            raise Exception("Expected no change in submissions to boulder:4500: expected %s, got %s" % (expected_a_submissions, submissions_a))
-        if (int(submissions_b) >= expected_b_submissions and
-            int(submissions_b) < 2 * expected_b_submissions + 1):
-            return
-        time.sleep(1)
-    raise Exception("Expected %d CT submissions to boulder:4501, found %s" % (expected_b_submissions, submissions_b))
-
-
 def test_expiration_mailer():
     email_addr = "integration.%x@letsencrypt.org" % random.randrange(2**16)
     cert, _ = auth_and_issue([random_domain()], email=email_addr)
