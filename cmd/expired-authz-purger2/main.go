@@ -36,8 +36,10 @@ var deletedStat = prometheus.NewCounter(
 	},
 )
 
+var clk = cmd.Clock()
+
 func delete(gracePeriod time.Duration, batchSize int, dbMap *gorp.DbMap) (int64, error) {
-	expires := time.Now().Add(-gracePeriod)
+	expires := clk.Now().Add(-gracePeriod)
 	res, err := dbMap.Exec(
 		"DELETE FROM authz2 WHERE expires <= :expires LIMIT :limit",
 		map[string]interface{}{
