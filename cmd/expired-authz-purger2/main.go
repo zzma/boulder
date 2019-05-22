@@ -52,6 +52,7 @@ func delete(gracePeriod time.Duration, batchSize int, dbMap *gorp.DbMap) (int64,
 }
 
 func main() {
+	singleRun := flag.Bool("single-run", false, "Exit after running first delete query instead of running indefinitely")
 	configPath := flag.String("config", "config.json", "Path to Boulder configuration file")
 	flag.Parse()
 
@@ -83,7 +84,13 @@ func main() {
 		deleted, err := delete(c.ExpiredAuthzPurger2.GracePeriod.Duration, c.ExpiredAuthzPurger2.BatchSize, dbMap)
 		if err != nil {
 			logger.Errf("failed to purge expired authorizations: %s", err)
-			continue
+			if !*singleRun {
+				continue
+			}
+		}
+		logger.Infof("deleted %d expired authorizations", deleted)
+		if *singleRun {
+			break
 		}
 		deletedStat.Add(float64(deleted))
 		if deleted == 0 {
