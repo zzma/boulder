@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/go-gorp/gorp.v2"
 
+	"github.com/jmhodges/clock"
 	"github.com/letsencrypt/boulder/cmd"
 	"github.com/letsencrypt/boulder/features"
 	blog "github.com/letsencrypt/boulder/log"
@@ -36,9 +37,7 @@ var deletedStat = prometheus.NewCounter(
 	},
 )
 
-var clk = cmd.Clock()
-
-func delete(gracePeriod time.Duration, batchSize int, dbMap *gorp.DbMap) (int64, error) {
+func delete(clk clock.Clock, gracePeriod time.Duration, batchSize int, dbMap *gorp.DbMap) (int64, error) {
 	expires := clk.Now().Add(-gracePeriod)
 	res, err := dbMap.Exec(
 		"DELETE FROM authz2 WHERE expires <= :expires LIMIT :limit",
@@ -77,13 +76,15 @@ func main() {
 	defer logger.AuditPanic()
 	logger.Info(cmd.VersionString())
 
+	clk := cmd.Clock()
+
 	dbURL, err := c.ExpiredAuthzPurger2.DBConfig.URL()
 	cmd.FailOnError(err, "Couldn't load DB URL")
 	dbMap, err := sa.NewDbMap(dbURL, c.ExpiredAuthzPurger2.DBConfig.MaxDBConns)
 	cmd.FailOnError(err, "Could not connect to database")
 
 	for {
-		deleted, err := delete(c.ExpiredAuthzPurger2.GracePeriod.Duration, c.ExpiredAuthzPurger2.BatchSize, dbMap)
+		deleted, err := delete(clk, c.ExpiredAuthzPurger2.GracePeriod.Duration, c.ExpiredAuthzPurger2.BatchSize, dbMap)
 		if err != nil {
 			logger.Errf("failed to purge expired authorizations: %s", err)
 			if !*singleRun {
