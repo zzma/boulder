@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"crypto/x509"
 	"encoding/json"
@@ -110,6 +111,7 @@ func main() {
 	caAddr := flag.String("ca-addr", "", "CA gRPC listen address override")
 	ocspAddr := flag.String("ocsp-addr", "", "OCSP gRPC listen address override")
 	debugAddr := flag.String("debug-addr", "", "Debug server address override")
+	runFuzz := flag.Bool("fuzz", false, "Run CA in fuzz mode")
 	configFile := flag.String("config", "", "File path to the configuration file for this service")
 	flag.Parse()
 	if *configFile == "" {
@@ -214,6 +216,18 @@ func main() {
 		caSrv.GracefulStop()
 		ocspSrv.GracefulStop()
 	})
+
+	if *runFuzz {
+		issueReq := &caPB.IssueCertificateRequest{
+			Csr: x509.CertificateRequest{}.Raw,
+		}
+
+		ctx := context.Background()
+
+		resp, err := cai.IssuePrecertificate(ctx, issueReq)
+		cmd.FailOnError(err, "Unable to generate certificate")
+		fmt.Println(resp.GetDER())
+	}
 
 	select {}
 }

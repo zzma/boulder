@@ -80,7 +80,7 @@ def start(race_detection, fakeclock=None, config_dir=default_config_dir):
         [8005, './bin/ocsp-responder --config %s' % os.path.join(config_dir, "ocsp-responder.json")],
         [8004, './bin/boulder-va --config %s --addr va1.boulder:9092 --debug-addr :8004' % os.path.join(config_dir, "va.json")],
         [8104, './bin/boulder-va --config %s --addr va2.boulder:9092 --debug-addr :8104' % os.path.join(config_dir, "va.json")],
-        [8001, './bin/boulder-ca --config %s --ca-addr ca1.boulder:9093 --ocsp-addr ca1.boulder:9096 --debug-addr :8001' % os.path.join(config_dir, "ca-a.json")],
+        [8001, './bin/boulder-ca --config %s --fuzz=true --ca-addr ca1.boulder:9093 --ocsp-addr ca1.boulder:9096 --debug-addr :8001' % os.path.join(config_dir, "ca-a.json")],
         [8101, './bin/boulder-ca --config %s --ca-addr ca2.boulder:9093 --ocsp-addr ca2.boulder:9096 --debug-addr :8101' % os.path.join(config_dir, "ca-b.json")],
         [6789, './bin/akamai-test-srv --listen localhost:6789 --secret its-a-secret'],
         [9666, './bin/akamai-purger --config %s' % os.path.join(config_dir, "akamai-purger.json")],
