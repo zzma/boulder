@@ -18,9 +18,11 @@ export SOFTHSM2_CONF=$PWD/softhsm2.conf
 mkdir -p $PWD/softhsm2-tokens
 echo "directories.tokendir = $PWD/softhsm2-tokens" > ${SOFTHSM2_CONF}
 softhsm2-util --slot 0 --init-token --label intermediate --pin 5678 --so-pin 1234
-softhsm2-util --slot 0 --import test-ca.key  --label intermediate_key --pin 5678 --id FB
+islot=$(softhsm2-util --show-slots | grep "intermediate" -B 15 | head -n 1 | awk '{print $2}')
+softhsm2-util --slot $islot --import test-ca.key  --label intermediate_key --pin 5678 --id FB
 softhsm2-util --slot 1 --init-token --label root --pin 5678 --so-pin 1234
-softhsm2-util --slot 1 --import test-root.key  --label root_key --pin 5678 --id FA
+rslot=$(softhsm2-util --show-slots | grep "root" -B 15 | head -n 1 | awk '{print $2}')
+softhsm2-util --slot $rslot --import test-root.key  --label root_key --pin 5678 --id FA
 echo
 echo "Add this to your .bashrc:"
 echo "export SOFTHSM2_CONF=${SOFTHSM2_CONF}"
