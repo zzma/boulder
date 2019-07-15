@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
-	"github.com/letsencrypt/boulder/test/vars"
+	"github.com/zzma/boulder/test"
+	"github.com/zzma/boulder/test/vars"
 )
 
 func TestInvalidDSN(t *testing.T) {

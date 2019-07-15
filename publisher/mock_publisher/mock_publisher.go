@@ -7,7 +7,7 @@ package mock_publisher
 import (
 	context "context"
 	gomock "github.com/golang/mock/gomock"
-	proto "github.com/letsencrypt/boulder/publisher/proto"
+	proto "github.com/zzma/boulder/publisher/proto"
 	reflect "reflect"
 )
 

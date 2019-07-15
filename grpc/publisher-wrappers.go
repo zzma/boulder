@@ -9,8 +9,8 @@ package grpc
 import (
 	"context"
 
-	"github.com/letsencrypt/boulder/publisher"
-	pubpb "github.com/letsencrypt/boulder/publisher/proto"
+	"github.com/zzma/boulder/publisher"
+	pubpb "github.com/zzma/boulder/publisher/proto"
 )
 
 // PublisherClientWrapper is a wrapper needed to satisfy the interfaces

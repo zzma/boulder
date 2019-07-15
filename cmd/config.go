@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/letsencrypt/boulder/core"
+	"github.com/zzma/boulder/core"
 )
 
 // PasswordConfig either contains a password or the path to a file

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/test"
 )
 
 func TestNewChallengeStrategy(t *testing.T) {

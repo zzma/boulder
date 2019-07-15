@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/letsencrypt/boulder/akamai"
-	akamaipb "github.com/letsencrypt/boulder/akamai/proto"
-	"github.com/letsencrypt/boulder/cmd"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	bgrpc "github.com/letsencrypt/boulder/grpc"
-	blog "github.com/letsencrypt/boulder/log"
+	"github.com/zzma/boulder/akamai"
+	akamaipb "github.com/zzma/boulder/akamai/proto"
+	"github.com/zzma/boulder/cmd"
+	corepb "github.com/zzma/boulder/core/proto"
+	bgrpc "github.com/zzma/boulder/grpc"
+	blog "github.com/zzma/boulder/log"
 )
 
 type config struct {

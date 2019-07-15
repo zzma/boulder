@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/core"
-	berrors "github.com/letsencrypt/boulder/errors"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	berrors "github.com/zzma/boulder/errors"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/test"
 )
 
 var log = blog.UseMock()

@@ -25,10 +25,10 @@ import (
 
 	ct "github.com/google/certificate-transparency-go"
 
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
-	pubpb "github.com/letsencrypt/boulder/publisher/proto"
-	"github.com/letsencrypt/boulder/test"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
+	pubpb "github.com/zzma/boulder/publisher/proto"
+	"github.com/zzma/boulder/test"
 )
 
 var testLeaf = `-----BEGIN CERTIFICATE-----

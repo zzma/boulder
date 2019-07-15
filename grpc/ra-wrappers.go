@@ -10,10 +10,10 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/letsencrypt/boulder/core"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	rapb "github.com/letsencrypt/boulder/ra/proto"
-	"github.com/letsencrypt/boulder/revocation"
+	"github.com/zzma/boulder/core"
+	corepb "github.com/zzma/boulder/core/proto"
+	rapb "github.com/zzma/boulder/ra/proto"
+	"github.com/zzma/boulder/revocation"
 )
 
 // RegistrationAuthorityClientWrapper is the gRPC version of a core.RegistrationAuthority client

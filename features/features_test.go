@@ -3,7 +3,7 @@ package features
 import (
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestFeatures(t *testing.T) {

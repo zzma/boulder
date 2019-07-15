@@ -6,7 +6,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/letsencrypt/boulder/cmd"
+	"github.com/zzma/boulder/cmd"
 )
 
 // Limits is defined to allow mock implementations be provided during unit

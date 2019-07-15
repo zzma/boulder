@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	blog "github.com/letsencrypt/boulder/log"
+	blog "github.com/zzma/boulder/log"
 )
 
 type RequestEvent struct {

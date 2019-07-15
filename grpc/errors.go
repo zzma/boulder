@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
-	berrors "github.com/letsencrypt/boulder/errors"
+	berrors "github.com/zzma/boulder/errors"
 )
 
 var (

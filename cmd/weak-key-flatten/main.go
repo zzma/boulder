@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/letsencrypt/boulder/cmd"
+	"github.com/zzma/boulder/cmd"
 )
 
 func main() {

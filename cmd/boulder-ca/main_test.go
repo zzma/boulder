@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/letsencrypt/boulder/ca/config"
+	"github.com/zzma/boulder/ca/config"
 )
 
 func TestLoadIssuerSuccess(t *testing.T) {

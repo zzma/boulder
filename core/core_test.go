@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 	"gopkg.in/square/go-jose.v2"
 )
 

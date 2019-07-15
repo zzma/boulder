@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestKnown(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/cmd"
-	bcreds "github.com/letsencrypt/boulder/grpc/creds"
+	"github.com/zzma/boulder/cmd"
+	bcreds "github.com/zzma/boulder/grpc/creds"
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 )

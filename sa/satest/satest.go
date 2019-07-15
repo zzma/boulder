@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/letsencrypt/boulder/core"
+	"github.com/zzma/boulder/core"
 	jose "gopkg.in/square/go-jose.v2"
 )
 

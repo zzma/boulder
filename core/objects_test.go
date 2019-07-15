@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestExpectedKeyAuthorization(t *testing.T) {

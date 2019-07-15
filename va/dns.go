@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
 )
 
 // getAddr will query for all A/AAAA records associated with hostname and return

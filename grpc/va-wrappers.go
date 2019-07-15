@@ -11,9 +11,9 @@ import (
 
 	ggrpc "google.golang.org/grpc"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/probs"
-	vaPB "github.com/letsencrypt/boulder/va/proto"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/probs"
+	vaPB "github.com/zzma/boulder/va/proto"
 )
 
 type ValidationAuthorityGRPCServer struct {

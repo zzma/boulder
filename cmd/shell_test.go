@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/letsencrypt/boulder/core"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/test"
 )
 
 var (

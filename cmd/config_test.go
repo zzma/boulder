@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestDBConfigURL(t *testing.T) {

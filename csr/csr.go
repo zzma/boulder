@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/goodkey"
-	"github.com/letsencrypt/boulder/identifier"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/goodkey"
+	"github.com/zzma/boulder/identifier"
 )
 
 // maxCNLength is the maximum length allowed for the common name as specified in RFC 5280

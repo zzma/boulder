@@ -6,7 +6,7 @@ import (
 	mrand "math/rand"
 	"strings"
 
-	"github.com/letsencrypt/boulder/core"
+	"github.com/zzma/boulder/core"
 )
 
 // ChallengeStrategy is an interface describing a strategy for picking

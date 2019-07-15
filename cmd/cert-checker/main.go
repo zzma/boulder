@@ -20,14 +20,14 @@ import (
 	"github.com/zmap/zlint"
 	"github.com/zmap/zlint/lints"
 
-	"github.com/letsencrypt/boulder/cmd"
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/features"
-	"github.com/letsencrypt/boulder/identifier"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
-	"github.com/letsencrypt/boulder/policy"
-	"github.com/letsencrypt/boulder/sa"
+	"github.com/zzma/boulder/cmd"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/features"
+	"github.com/zzma/boulder/identifier"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
+	"github.com/zzma/boulder/policy"
+	"github.com/zzma/boulder/sa"
 )
 
 const (

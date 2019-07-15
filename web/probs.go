@@ -1,8 +1,8 @@
 package web
 
 import (
-	berrors "github.com/letsencrypt/boulder/errors"
-	"github.com/letsencrypt/boulder/probs"
+	berrors "github.com/zzma/boulder/errors"
+	"github.com/zzma/boulder/probs"
 )
 
 func problemDetailsForBoulderError(err *berrors.BoulderError, msg string) *probs.ProblemDetails {

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/metrics"
-	noncepb "github.com/letsencrypt/boulder/nonce/proto"
-	"github.com/letsencrypt/boulder/test"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/metrics"
+	noncepb "github.com/zzma/boulder/nonce/proto"
+	"github.com/zzma/boulder/test"
 	"google.golang.org/grpc"
 )
 

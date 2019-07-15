@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	blog "github.com/letsencrypt/boulder/log"
+	blog "github.com/zzma/boulder/log"
 )
 
 type myHandler struct{}

@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/test"
 )
 
 func TestServerTransportCredentials(t *testing.T) {

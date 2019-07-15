@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 // Path constants for test cases and mockDirectoryServer handlers.

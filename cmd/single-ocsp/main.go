@@ -10,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
-	"github.com/letsencrypt/boulder/core"
+	"github.com/zzma/boulder/cmd"
+	"github.com/zzma/boulder/core"
 
 	"github.com/letsencrypt/pkcs11key"
 	"golang.org/x/crypto/ocsp"

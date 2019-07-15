@@ -6,7 +6,7 @@ package mock_metrics
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	metrics "github.com/letsencrypt/boulder/metrics"
+	metrics "github.com/zzma/boulder/metrics"
 	prometheus "github.com/prometheus/client_golang/prometheus"
 	reflect "reflect"
 	time "time"

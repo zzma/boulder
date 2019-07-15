@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/cmd"
+	"github.com/zzma/boulder/test"
 )
 
 func TestEnabled(t *testing.T) {

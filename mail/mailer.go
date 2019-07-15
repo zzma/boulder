@@ -21,9 +21,9 @@ import (
 
 	"github.com/jmhodges/clock"
 
-	"github.com/letsencrypt/boulder/core"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
+	"github.com/zzma/boulder/core"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
 )
 
 type idGenerator interface {

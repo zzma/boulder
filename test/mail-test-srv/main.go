@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
-	blog "github.com/letsencrypt/boulder/log"
+	"github.com/zzma/boulder/cmd"
+	blog "github.com/zzma/boulder/log"
 )
 
 type mailSrv struct {

@@ -6,9 +6,9 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	caPB "github.com/letsencrypt/boulder/ca/proto"
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/revocation"
+	caPB "github.com/zzma/boulder/ca/proto"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/revocation"
 )
 
 // MockCA is a mock of a CA that always returns the cert from PEM in response to

@@ -13,11 +13,11 @@ import (
 
 	jose "gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/core"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/grpc"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/revocation"
+	"github.com/zzma/boulder/core"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/grpc"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/revocation"
 )
 
 // errBadJSON is an error type returned when a json.Unmarshal performed by the

@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/mocks"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/mocks"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/test"
 
 	"gopkg.in/square/go-jose.v2"
 )

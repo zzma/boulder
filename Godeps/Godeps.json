@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/letsencrypt/boulder",
+	"ImportPath": "github.com/zzma/boulder",
 	"GoVersion": "go1.12",
 	"GodepVersion": "v80",
 	"Packages": [

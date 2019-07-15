@@ -18,13 +18,13 @@ OBJECTS = $(CMD_BINS)
 COMMIT_ID = $(shell git rev-parse --short HEAD)
 
 BUILD_ID = $(shell git symbolic-ref --short HEAD 2>/dev/null) +$(COMMIT_ID)
-BUILD_ID_VAR = github.com/letsencrypt/boulder/core.BuildID
+BUILD_ID_VAR = github.com/zzma/boulder/core.BuildID
 
 BUILD_HOST = $(shell whoami)@$(shell hostname)
-BUILD_HOST_VAR = github.com/letsencrypt/boulder/core.BuildHost
+BUILD_HOST_VAR = github.com/zzma/boulder/core.BuildHost
 
 BUILD_TIME = $(shell date -u)
-BUILD_TIME_VAR = github.com/letsencrypt/boulder/core.BuildTime
+BUILD_TIME_VAR = github.com/zzma/boulder/core.BuildTime
 
 GO_BUILD_FLAGS = -ldflags "-X \"$(BUILD_ID_VAR)=$(BUILD_ID)\" -X \"$(BUILD_TIME_VAR)=$(BUILD_TIME)\" -X \"$(BUILD_HOST_VAR)=$(BUILD_HOST)\""
 
@@ -51,7 +51,7 @@ build_cmds: | $(OBJDIR)
 rpm: build
 	fpm -f -s dir -t rpm --rpm-digest sha256 --name "boulder" \
 		--license "Mozilla Public License v2.0" --vendor "ISRG" \
-		--url "https://github.com/letsencrypt/boulder" --prefix=/opt/boulder \
+		--url "https://github.com/zzma/boulder" --prefix=/opt/boulder \
 		--version "$(VERSION)" --iteration "$(COMMIT_ID)" --epoch "$(EPOCH)" \
 		--package "$(ARCHIVEDIR)/boulder-$(VERSION)-$(COMMIT_ID).x86_64.rpm" \
 		--description "Boulder is an ACME-compatible X.509 Certificate Authority" \

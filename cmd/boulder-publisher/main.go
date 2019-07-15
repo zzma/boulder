@@ -7,12 +7,12 @@ import (
 
 	ct "github.com/google/certificate-transparency-go"
 
-	"github.com/letsencrypt/boulder/cmd"
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/features"
-	bgrpc "github.com/letsencrypt/boulder/grpc"
-	"github.com/letsencrypt/boulder/publisher"
-	pubPB "github.com/letsencrypt/boulder/publisher/proto"
+	"github.com/zzma/boulder/cmd"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/features"
+	bgrpc "github.com/zzma/boulder/grpc"
+	"github.com/zzma/boulder/publisher"
+	pubPB "github.com/zzma/boulder/publisher/proto"
 )
 
 type config struct {

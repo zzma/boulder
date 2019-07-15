@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/letsencrypt/boulder/test/ocsp/helper"
+	"github.com/zzma/boulder/test/ocsp/helper"
 	prom "github.com/prometheus/client_golang/prometheus"
 	promhttp "github.com/prometheus/client_golang/prometheus/promhttp"
 )

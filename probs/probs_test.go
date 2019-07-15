@@ -5,8 +5,8 @@ import (
 
 	"net/http"
 
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/test"
 )
 
 func TestProblemDetails(t *testing.T) {

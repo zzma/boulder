@@ -7,8 +7,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"gopkg.in/go-gorp/gorp.v2"
 
-	"github.com/letsencrypt/boulder/core"
-	blog "github.com/letsencrypt/boulder/log"
+	"github.com/zzma/boulder/core"
+	blog "github.com/zzma/boulder/log"
 )
 
 // NewDbMap creates the root gorp mapping object. Create one of these for each

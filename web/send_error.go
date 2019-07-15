@@ -9,8 +9,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/probs"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/probs"
 )
 
 // SendError does a few things that we want for each error response:

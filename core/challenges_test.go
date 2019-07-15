@@ -3,7 +3,7 @@ package core
 import (
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestNewChallenge(t *testing.T) {

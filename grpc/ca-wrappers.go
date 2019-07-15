@@ -13,10 +13,10 @@ import (
 
 	"google.golang.org/grpc"
 
-	caPB "github.com/letsencrypt/boulder/ca/proto"
-	"github.com/letsencrypt/boulder/core"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/revocation"
+	caPB "github.com/zzma/boulder/ca/proto"
+	"github.com/zzma/boulder/core"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/revocation"
 )
 
 // CertificateAuthorityClientWrapper is the gRPC version of a

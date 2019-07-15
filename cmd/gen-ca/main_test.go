@@ -12,8 +12,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/letsencrypt/boulder/pkcs11helpers"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/pkcs11helpers"
+	"github.com/zzma/boulder/test"
 	"github.com/miekg/pkcs11"
 )
 

@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
-	"github.com/letsencrypt/boulder/publisher"
+	"github.com/zzma/boulder/cmd"
+	"github.com/zzma/boulder/publisher"
 )
 
 type ctSubmissionRequest struct {

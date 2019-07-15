@@ -13,10 +13,10 @@ import (
 
 	"gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/core"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/revocation"
-	sapb "github.com/letsencrypt/boulder/sa/proto"
+	"github.com/zzma/boulder/core"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/revocation"
+	sapb "github.com/zzma/boulder/sa/proto"
 )
 
 // StorageAuthorityClientWrapper is the gRPC version of a core.StorageAuthority client

@@ -14,7 +14,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/letsencrypt/boulder/metrics"
+	"github.com/zzma/boulder/metrics"
 )
 
 func parseCidr(network string, comment string) net.IPNet {

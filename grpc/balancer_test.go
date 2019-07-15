@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/grpc/naming"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestStaticResolver(t *testing.T) {

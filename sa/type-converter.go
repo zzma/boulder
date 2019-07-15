@@ -8,8 +8,8 @@ import (
 	"gopkg.in/go-gorp/gorp.v2"
 	jose "gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/identifier"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/identifier"
 )
 
 // BoulderTypeConverter is used by Gorp for storing objects in DB.

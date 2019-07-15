@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/jmhodges/clock"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
-	"github.com/letsencrypt/boulder/test"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
+	"github.com/zzma/boulder/test"
 )
 
 func TestConstructAuthHeader(t *testing.T) {

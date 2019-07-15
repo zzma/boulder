@@ -20,11 +20,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/revocation"
-	"github.com/letsencrypt/boulder/test/load-generator/acme"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/revocation"
+	"github.com/zzma/boulder/test/load-generator/acme"
 	"gopkg.in/square/go-jose.v2"
 )
 

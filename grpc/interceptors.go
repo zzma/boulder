@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	berrors "github.com/letsencrypt/boulder/errors"
+	berrors "github.com/zzma/boulder/errors"
 )
 
 const (

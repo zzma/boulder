@@ -24,11 +24,11 @@ import (
 	cttls "github.com/google/certificate-transparency-go/tls"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/letsencrypt/boulder/canceled"
-	"github.com/letsencrypt/boulder/core"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
-	pubpb "github.com/letsencrypt/boulder/publisher/proto"
+	"github.com/zzma/boulder/canceled"
+	"github.com/zzma/boulder/core"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
+	pubpb "github.com/zzma/boulder/publisher/proto"
 )
 
 // Log contains the CT client and signature verifier for a particular CT log

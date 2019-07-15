@@ -1,4 +1,4 @@
-module github.com/letsencrypt/boulder
+module github.com/zzma/boulder
 
 go 1.12
 

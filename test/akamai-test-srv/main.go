@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/letsencrypt/boulder/akamai"
-	"github.com/letsencrypt/boulder/cmd"
+	"github.com/zzma/boulder/akamai"
+	"github.com/zzma/boulder/cmd"
 )
 
 func main() {

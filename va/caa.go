@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/features"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	vapb "github.com/letsencrypt/boulder/va/proto"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/features"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	vapb "github.com/zzma/boulder/va/proto"
 	"github.com/miekg/dns"
 )
 

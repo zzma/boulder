@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
+	"github.com/zzma/boulder/cmd"
 )
 
 type Config struct {

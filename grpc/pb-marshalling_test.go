@@ -8,12 +8,12 @@ import (
 
 	"gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/core"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/test"
-	vapb "github.com/letsencrypt/boulder/va/proto"
+	"github.com/zzma/boulder/core"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/test"
+	vapb "github.com/zzma/boulder/va/proto"
 )
 
 func TestAuthzMeta(t *testing.T) {

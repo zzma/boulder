@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 func TestTemporalSetup(t *testing.T) {

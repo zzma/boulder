@@ -41,9 +41,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/letsencrypt/boulder/core"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
+	"github.com/zzma/boulder/core"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
 )
 
 // Because we don't know when this init will be called with respect to

@@ -13,9 +13,9 @@ import (
 
 	"gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/revocation"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/revocation"
 )
 
 // AcmeStatus defines the state of a given authorization

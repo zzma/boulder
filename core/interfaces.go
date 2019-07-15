@@ -9,13 +9,13 @@ import (
 
 	jose "gopkg.in/square/go-jose.v2"
 
-	caPB "github.com/letsencrypt/boulder/ca/proto"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	"github.com/letsencrypt/boulder/identifier"
-	pubpb "github.com/letsencrypt/boulder/publisher/proto"
-	rapb "github.com/letsencrypt/boulder/ra/proto"
-	"github.com/letsencrypt/boulder/revocation"
-	sapb "github.com/letsencrypt/boulder/sa/proto"
+	caPB "github.com/zzma/boulder/ca/proto"
+	corepb "github.com/zzma/boulder/core/proto"
+	"github.com/zzma/boulder/identifier"
+	pubpb "github.com/zzma/boulder/publisher/proto"
+	rapb "github.com/zzma/boulder/ra/proto"
+	"github.com/zzma/boulder/revocation"
+	sapb "github.com/zzma/boulder/sa/proto"
 )
 
 // A WebFrontEnd object supplies methods that can be hooked into

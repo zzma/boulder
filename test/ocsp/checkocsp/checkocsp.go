@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/letsencrypt/boulder/test/ocsp/helper"
+	"github.com/zzma/boulder/test/ocsp/helper"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/letsencrypt/boulder/core"
+	"github.com/zzma/boulder/core"
 )
 
 const getAuthorizationIDsMax = 1000

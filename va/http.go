@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/letsencrypt/boulder/core"
-	berrors "github.com/letsencrypt/boulder/errors"
-	"github.com/letsencrypt/boulder/iana"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
+	"github.com/zzma/boulder/core"
+	berrors "github.com/zzma/boulder/errors"
+	"github.com/zzma/boulder/iana"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
 )
 
 const (

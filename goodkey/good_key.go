@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"sync"
 
-	berrors "github.com/letsencrypt/boulder/errors"
+	berrors "github.com/zzma/boulder/errors"
 	"github.com/titanous/rocacheck"
 )
 

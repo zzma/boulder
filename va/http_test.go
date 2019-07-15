@@ -16,12 +16,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/letsencrypt/boulder/bdns"
-	"github.com/letsencrypt/boulder/core"
-	berrors "github.com/letsencrypt/boulder/errors"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/bdns"
+	"github.com/zzma/boulder/core"
+	berrors "github.com/zzma/boulder/errors"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/test"
 
 	"testing"
 )

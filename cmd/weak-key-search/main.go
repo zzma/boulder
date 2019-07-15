@@ -12,9 +12,9 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/letsencrypt/boulder/cmd"
-	"github.com/letsencrypt/boulder/goodkey"
-	blog "github.com/letsencrypt/boulder/log"
+	"github.com/zzma/boulder/cmd"
+	"github.com/zzma/boulder/goodkey"
+	blog "github.com/zzma/boulder/log"
 )
 
 type certInfo struct {

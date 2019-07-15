@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/core"
-	blog "github.com/letsencrypt/boulder/log"
-	"github.com/letsencrypt/boulder/metrics"
-	"github.com/letsencrypt/boulder/sa"
-	"github.com/letsencrypt/boulder/test"
-	"github.com/letsencrypt/boulder/test/vars"
+	"github.com/zzma/boulder/core"
+	blog "github.com/zzma/boulder/log"
+	"github.com/zzma/boulder/metrics"
+	"github.com/zzma/boulder/sa"
+	"github.com/zzma/boulder/test"
+	"github.com/zzma/boulder/test/vars"
 	"gopkg.in/square/go-jose.v2"
 )
 

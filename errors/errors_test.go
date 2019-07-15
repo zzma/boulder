@@ -3,8 +3,8 @@ package errors
 import (
 	"testing"
 
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/test"
 )
 
 // TestWithSubErrors tests that a boulder error can be created by adding

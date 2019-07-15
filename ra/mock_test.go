@@ -5,9 +5,9 @@ import (
 
 	"google.golang.org/grpc"
 
-	core "github.com/letsencrypt/boulder/core/proto"
-	corepb "github.com/letsencrypt/boulder/core/proto"
-	sapb "github.com/letsencrypt/boulder/sa/proto"
+	core "github.com/zzma/boulder/core/proto"
+	corepb "github.com/zzma/boulder/core/proto"
+	sapb "github.com/zzma/boulder/sa/proto"
 )
 
 var (

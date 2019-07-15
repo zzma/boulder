@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/metrics"
+	"github.com/zzma/boulder/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

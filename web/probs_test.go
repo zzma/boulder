@@ -5,10 +5,10 @@ import (
 	"reflect"
 	"testing"
 
-	berrors "github.com/letsencrypt/boulder/errors"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/test"
+	berrors "github.com/zzma/boulder/errors"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/test"
 )
 
 func TestProblemDetailsFromError(t *testing.T) {

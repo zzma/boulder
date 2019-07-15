@@ -17,11 +17,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/square/go-jose.v2"
 
-	"github.com/letsencrypt/boulder/core"
-	berrors "github.com/letsencrypt/boulder/errors"
-	"github.com/letsencrypt/boulder/nonce"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/web"
+	"github.com/zzma/boulder/core"
+	berrors "github.com/zzma/boulder/errors"
+	"github.com/zzma/boulder/nonce"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/web"
 )
 
 // POST requests with a JWS body must have the following Content-Type header

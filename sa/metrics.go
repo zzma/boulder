@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/letsencrypt/boulder/metrics"
+	"github.com/zzma/boulder/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/go-gorp/gorp.v2"
 )

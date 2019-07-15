@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/letsencrypt/boulder/cmd"
+	"github.com/zzma/boulder/cmd"
 )
 
 // LogShard describes a single shard of a temporally sharded

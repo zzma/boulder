@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/jmhodges/clock"
-	blog "github.com/letsencrypt/boulder/log"
+	blog "github.com/zzma/boulder/log"
 )
 
 // Clock functions similarly to clock.Default(), but the returned value can be

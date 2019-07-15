@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/jmhodges/clock"
-	"github.com/letsencrypt/boulder/metrics"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/metrics"
+	"github.com/zzma/boulder/test"
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
 )

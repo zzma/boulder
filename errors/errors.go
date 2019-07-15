@@ -3,7 +3,7 @@ package errors
 import (
 	"fmt"
 
-	"github.com/letsencrypt/boulder/identifier"
+	"github.com/zzma/boulder/identifier"
 )
 
 // ErrorType provides a coarse category for BoulderErrors

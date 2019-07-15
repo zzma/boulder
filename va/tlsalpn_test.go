@@ -19,11 +19,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/letsencrypt/boulder/bdns"
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/bdns"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/test"
 )
 
 func tlsCertTemplate(names []string) *x509.Certificate {

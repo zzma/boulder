@@ -11,14 +11,14 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/features"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/features"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
+	"github.com/zzma/boulder/test"
 
-	blog "github.com/letsencrypt/boulder/log"
-	vapb "github.com/letsencrypt/boulder/va/proto"
+	blog "github.com/zzma/boulder/log"
+	vapb "github.com/zzma/boulder/va/proto"
 )
 
 // caaMockDNS implements the `dns.DNSClient` interface with a set of useful test

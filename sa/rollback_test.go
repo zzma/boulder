@@ -3,8 +3,8 @@ package sa
 import (
 	"testing"
 
-	berrors "github.com/letsencrypt/boulder/errors"
-	"github.com/letsencrypt/boulder/test"
+	berrors "github.com/zzma/boulder/errors"
+	"github.com/zzma/boulder/test"
 )
 
 func TestRollback(t *testing.T) {

@@ -28,7 +28,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/letsencrypt/boulder/pkcs11helpers"
+	"github.com/zzma/boulder/pkcs11helpers"
 	"github.com/miekg/pkcs11"
 )
 

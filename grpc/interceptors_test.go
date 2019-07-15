@@ -17,9 +17,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/letsencrypt/boulder/grpc/test_proto"
-	"github.com/letsencrypt/boulder/metrics"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/grpc/test_proto"
+	"github.com/zzma/boulder/metrics"
+	"github.com/zzma/boulder/test"
 )
 
 var fc = clock.NewFake()

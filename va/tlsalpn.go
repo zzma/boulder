@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/probs"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/probs"
 )
 
 const (

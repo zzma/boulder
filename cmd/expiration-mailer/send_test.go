@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/letsencrypt/boulder/mocks"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/mocks"
+	"github.com/zzma/boulder/test"
 )
 
 var (

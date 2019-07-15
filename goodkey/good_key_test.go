@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/test"
 )
 
 var testingPolicy = &KeyPolicy{

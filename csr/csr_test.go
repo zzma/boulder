@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/letsencrypt/boulder/core"
-	"github.com/letsencrypt/boulder/goodkey"
-	"github.com/letsencrypt/boulder/identifier"
-	"github.com/letsencrypt/boulder/test"
+	"github.com/zzma/boulder/core"
+	"github.com/zzma/boulder/goodkey"
+	"github.com/zzma/boulder/identifier"
+	"github.com/zzma/boulder/test"
 )
 
 var testingPolicy = &goodkey.KeyPolicy{
