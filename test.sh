@@ -115,6 +115,28 @@ if [[ "$RUN" =~ "integration" ]] ; then
     python2 test/integration-test.py "${args[@]}"
 fi
 
+#
+# Fuzzing tests
+#
+if [[ "$RUN" =~ "fuzz" ]] ; then
+  args=("--fuzz")
+  if [[ "${INT_SKIP_LOAD:-}" == "" ]]; then
+    args+=("--load")
+  fi
+  if [[ "${INT_FILTER:-}" != "" ]]; then
+    args+=("--filter" "${INT_FILTER}")
+  fi
+  if [[ "${INT_SKIP_SETUP:-}" =~ "true" ]]; then
+    args+=("--skip-setup")
+  fi
+
+  source ${CERTBOT_PATH:-/certbot}/${VENV_NAME:-venv}/bin/activate
+  DIRECTORY=http://boulder:4000/directory \
+    python2 test/fuzz-test.py "${args[@]}"
+fi
+
+
+
 # Test that just ./start.py works, which is a proxy for testing that
 # `docker-compose up` works, since that just runs start.py (via entrypoint.sh).
 if [[ "$RUN" =~ "start" ]] ; then

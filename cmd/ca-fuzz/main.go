@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"crypto/x509"
 	"encoding/json"
@@ -16,13 +17,12 @@ import (
 
 	"github.com/zzma/boulder/ca"
 	"github.com/zzma/boulder/ca/config"
+	caPB "github.com/zzma/boulder/ca/proto"
 	"github.com/zzma/boulder/cmd"
 	"github.com/zzma/boulder/core"
 	"github.com/zzma/boulder/features"
 	"github.com/zzma/boulder/goodkey"
-	bgrpc "github.com/zzma/boulder/grpc"
 	"github.com/zzma/boulder/policy"
-	sapb "github.com/zzma/boulder/sa/proto"
 )
 
 type config struct {
@@ -150,15 +150,7 @@ func main() {
 	kp, err := goodkey.NewKeyPolicy(c.CA.WeakKeyFile)
 	cmd.FailOnError(err, "Unable to create key policy")
 
-	tlsConfig, err := c.CA.TLS.Load()
-	cmd.FailOnError(err, "TLS config")
-
 	clk := cmd.Clock()
-
-	clientMetrics := bgrpc.NewClientMetrics(scope)
-	conn, err := bgrpc.ClientSetup(c.CA.SAService, tlsConfig, clientMetrics, clk)
-	cmd.FailOnError(err, "Failed to load credentials and create gRPC connection to SA")
-	sa := bgrpc.NewStorageAuthorityClient(sapb.NewStorageAuthorityClient(conn))
 
 	var orphanQueue *goque.Queue
 	if c.CA.OrphanQueueDir != "" {
@@ -169,7 +161,7 @@ func main() {
 
 	cai, err := ca.NewCertificateAuthorityImpl(
 		c.CA,
-		sa,
+		nil,
 		pa,
 		clk,
 		scope,
@@ -179,9 +171,14 @@ func main() {
 		orphanQueue)
 	cmd.FailOnError(err, "Failed to create CA impl")
 
-	if orphanQueue != nil {
-		go cai.OrphanIntegrationLoop()
+	issueReq := &caPB.IssueCertificateRequest{
+		Csr: x509.CertificateRequest{}.Raw,
 	}
+
+	ctx := context.Background()
+
+	resp, err := cai.IssuePrecertificate(ctx, issueReq)
+	fmt.Println(resp.GetDER())
 
 	go cmd.CatchSignals(logger, func() {
 		os.Exit(1)
