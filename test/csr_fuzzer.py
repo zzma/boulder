@@ -66,7 +66,17 @@ def fuzz(iterations):
             'sig_alg': random.choice(ALL_OPTIONS['sig_algs']),
             'extensions': random.sample(ALL_OPTIONS['extensions'], random.randint(0,len(ALL_OPTIONS['extensions'])))
         }
-        csrs.append(generate_csr(domains, options))
+
+        #TODO: implement better mutation logic / at least memoize
+
+        print(options)
+        try:
+            csrs.append(generate_csr(options))
+        except OpenSSL.crypto.Error as e:
+            if 'invalid digest type' in str(e):
+                print("WARNING: invalid pkey + signature alg combination: " + repr(options['key']) + ' ' + options['sig_alg'])
+        except Exception as e:
+            raise e
 
     return csrs
 
@@ -134,4 +144,4 @@ def gen_ss_cert(key, domains, not_before=None,
     return cert
 
 if __name__ == "__main__":
-    print(fuzz(["test.com"]))
+    print(fuzz(10))
