@@ -1,0 +1,22 @@
+# See cmd/shell.go for definitions of these rate limits.
+certificatesPerName:
+  window: 1m
+  threshold: 10000000
+registrationsPerIP:
+  window: 1m
+  threshold: 10000000
+registrationsPerIPRange:
+  window: 1m
+  threshold: 10000000
+pendingAuthorizationsPerAccount:
+  window: 1m
+  threshold: 10000000
+invalidAuthorizationsPerAccount:
+  window: 1m
+  threshold: 10000000
+newOrdersPerAccount:
+  window: 1m
+  threshold: 10000000
+certificatesPerFQDNSet:
+  window: 1m
+  threshold: 10000000

@@ -82,7 +82,7 @@ def http_01_answer(client, chall_body):
           chall=chall_body.chall, response=response,
           validation=validation)
 
-def auth_and_issue(domains, chall_type="dns-01", email=None, cert_output=None, client=None):
+def auth_and_issue(domains, chall_type="dns-01", email=None, client=None):
     """Make authzs for each of the given domains, set up a server to answer the
        challenges in those authzs, tell the ACME server to validate the challenges,
        then poll for the authzs to be ready and issue a cert."""
@@ -108,6 +108,33 @@ def auth_and_issue(domains, chall_type="dns-01", email=None, cert_output=None, c
         cleanup()
 
     return order
+
+def auth_and_issue_csr(csr_pem, chall_type="dns-01", email=None, client=None):
+    """Make authzs for each of the given domains, set up a server to answer the
+       challenges in those authzs, tell the ACME server to validate the challenges,
+       then poll for the authzs to be ready and issue a cert."""
+    if client is None:
+        client = make_client(email)
+
+    order = client.new_order(csr_pem)
+    authzs = order.authorizations
+
+    if chall_type == "http-01":
+        cleanup = do_http_challenges(client, authzs)
+    elif chall_type == "dns-01":
+        cleanup = do_dns_challenges(client, authzs)
+    elif chall_type == "tls-alpn-01":
+        cleanup = do_tlsalpn_challenges(client, authzs)
+    else:
+        raise Exception("invalid challenge type %s" % chall_type)
+
+    try:
+        order = client.poll_and_finalize(order)
+    finally:
+        cleanup()
+
+    return order
+
 
 def do_dns_challenges(client, authzs):
     cleanup_hosts = []

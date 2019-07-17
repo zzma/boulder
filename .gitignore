@@ -37,3 +37,6 @@ tags
 .idea
 
 .vscode/*
+
+# Virtual env stuff
+venv/
