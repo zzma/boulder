@@ -6,16 +6,19 @@ Most test cases are in fuzz.py.
 """
 import argparse
 import atexit
-import datetime
-import inspect
 
 import startservers
 
-import chisel
-from chisel import auth_and_issue
-import v1_integration
-import fuzz
+
+import chisel2
+import csr_fuzzer
+import traceback
+
 from helpers import *
+
+import challtestsrv
+challSrv = challtestsrv.ChallTestServer()
+
 
 exit_status = 1
 
@@ -43,22 +46,6 @@ def main():
     if not (args.run_all or args.run_certbot or args.run_fuzz or args.run_loadtest or args.custom is not None):
         raise Exception("must run at least one of the letsencrypt or chisel tests with --all, --certbot, --chisel, --load or --custom")
 
-    if not args.skip_setup:
-        now = datetime.datetime.utcnow()
-
-        # In CONFIG_NEXT mode, use the basic, non-next config for setup.
-        # This lets us test the transition to authz2.
-        config = default_config_dir
-        if CONFIG_NEXT:
-            config = "test/config"
-        now = datetime.datetime.utcnow()
-        twenty_days_ago = now+datetime.timedelta(days=-20)
-        if not startservers.start(race_detection=True, fakeclock=fakeclock(twenty_days_ago), config_dir=config):
-            raise Exception("startservers failed (mocking twenty days ago)")
-        v1_integration.caa_client = caa_client = chisel.make_client()
-        setup_twenty_days_ago()
-        startservers.stop()
-
     if not startservers.start(race_detection=True):
         raise Exception("startservers failed")
 
@@ -74,10 +61,24 @@ def main():
     global exit_status
     exit_status = 0
 
-def run_fuzz(test_case_filter):
-    for key, value in inspect.getmembers(fuzz):
-        if callable(value) and key.startswith('test_') and re.search(test_case_filter, key):
-            value()
+
+def run_fuzz():
+    fuzzy_csrs = csr_fuzzer.fuzz(5)
+    for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
+        if challenge == "tls-alpn-01":
+            challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in csr_fuzzer.py
+
+        for csr in fuzzy_csrs:
+            print("CSR", csr)
+            try:
+                order = chisel2.auth_and_issue_csr(csr, chall_type=challenge)
+                print(order)
+            except Exception:
+                traceback.print_exc()
+
+
+        if challenge == "tls-alpn-01":
+            challSrv.remove_a_record("test.domain.com") # this domain is in csr_fuzzer.py
 
 if __name__ == "__main__":
     try:

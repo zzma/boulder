@@ -95,8 +95,8 @@ def generate_csr(options):
     csr.set_pubkey(private_key)
     csr.set_version(2)
     csr.sign(private_key, options['sig_alg'])
-    return [crypto.dump_certificate_request(
-        crypto.FILETYPE_PEM, csr)]
+    return crypto.dump_certificate_request(
+        crypto.FILETYPE_PEM, csr)
 
 
 def gen_ss_cert(key, domains, not_before=None,
