@@ -132,7 +132,7 @@ if [[ "$RUN" =~ "fuzz" ]] ; then
 
   source ${CERTBOT_PATH:-/certbot}/${VENV_NAME:-venv}/bin/activate
   DIRECTORY=http://boulder:4000/directory \
-    python2 test/fuzz_test.py "${args[@]}"
+    python2 test/fuzz.py "${args[@]}"
 fi
 
 
