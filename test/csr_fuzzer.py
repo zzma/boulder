@@ -2,42 +2,89 @@
 import binascii
 import logging
 import os
+import random
 
 import OpenSSL
 from OpenSSL import crypto
 
 logger = logging.getLogger(__name__)
 
-def fuzz(domains):
-    """Generate and fuzz CSR containing a list of domains as subjectAltNames.
-
-    :param list domains: List of DNS names to include in subjectAltNames of CSR.
-    :returns: a list of buffer PEM-encoded Certificate Signing Requests.
-    """
-    key = OpenSSL.crypto.PKey()
-    key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
-    private_key_pem = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key)
-    must_staple = False
-
-    private_key = crypto.load_privatekey(
-        crypto.FILETYPE_PEM, private_key_pem)
-    csr = crypto.X509Req()
-    extensions = [
+domains = ["test.domain.com"]
+ALL_OPTIONS = {
+    'keys': [(OpenSSL.crypto.TYPE_RSA, 4096), (OpenSSL.crypto.TYPE_RSA, 2048), (OpenSSL.crypto.TYPE_RSA, 1024),
+             (OpenSSL.crypto.TYPE_DSA, 2048), (OpenSSL.crypto.TYPE_DSA, 1024)],
+    # other types of public keys are not supported by pyopenssl - not sure how to get ECDSA or EdDSA/Ed25519
+    'sig_algs': ["MD4",
+                 "MD5",
+                 "MD5-SHA1",
+                 "MDC2",
+                 "RIPEMD160",
+                 "SHA1",
+                 "SHA224",
+                 "SHA256",
+                 "SHA384",
+                 "SHA512",
+                 "MD4",
+                 "MD5",
+                 "MD5-SHA1",
+                 "MDC2",
+                 "RIPEMD160",
+                 "SHA1",
+                 "SHA224",
+                 "SHA256",
+                 "SHA384",
+                 "SHA512",
+                 "whirlpool",
+                 ],
+    'extensions': [
         crypto.X509Extension(
             b'subjectAltName',
             critical=False,
             value=', '.join('DNS:' + d for d in domains).encode('ascii')
         ),
-    ]
-    if must_staple:
-        extensions.append(crypto.X509Extension(
+        crypto.X509Extension( # OSCP must staple
             b"1.3.6.1.5.5.7.1.24",
             critical=False,
-            value=b"DER:30:03:02:01:05"))
-    csr.add_extensions(extensions)
+            value=b"DER:30:03:02:01:05"
+        ),
+    ],
+}
+
+
+def fuzz(iterations):
+    """Generate and fuzz CSR containing a list of domains as subjectAltNames.
+
+    :param list domains: List of DNS names to include in subjectAltNames of CSR.
+    :returns: a list of buffer PEM-encoded Certificate Signing Requests.
+    """
+    random.seed(12345)
+
+    csrs = []
+    for iteration in range(1,iterations+1):
+        options = {
+            'key': random.choice(ALL_OPTIONS['keys']),
+            'sig_alg': random.choice(ALL_OPTIONS['sig_algs']),
+            'extensions': random.sample(ALL_OPTIONS['extensions'], random.randint(0,len(ALL_OPTIONS['extensions'])))
+        }
+        csrs.append(generate_csr(domains, options))
+
+    return csrs
+
+
+
+def generate_csr(options):
+    key = OpenSSL.crypto.PKey()
+    # key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
+    key.generate_key(options['key'][0], options['key'][1])
+    private_key_pem = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key)
+
+    private_key = crypto.load_privatekey(
+        crypto.FILETYPE_PEM, private_key_pem)
+    csr = crypto.X509Req()
+    csr.add_extensions(options['extensions'])
     csr.set_pubkey(private_key)
     csr.set_version(2)
-    csr.sign(private_key, 'sha256')
+    csr.sign(private_key, options['sig_alg'])
     return [crypto.dump_certificate_request(
         crypto.FILETYPE_PEM, csr)]
 
