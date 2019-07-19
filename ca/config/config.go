@@ -3,7 +3,6 @@ package ca_config
 import (
 	cfsslConfig "github.com/cloudflare/cfssl/config"
 	"github.com/letsencrypt/pkcs11key"
-
 	"github.com/zzma/boulder/cmd"
 )
 

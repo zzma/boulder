@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"github.com/zzma/boulder/cmd"
 	"math/big"
 	"strings"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"github.com/jmhodges/clock"
 	"github.com/miekg/pkcs11"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/zzma/boulder/ca/config"
 	caPB "github.com/zzma/boulder/ca/proto"
 	"github.com/zzma/boulder/core"
@@ -37,7 +39,6 @@ import (
 	"github.com/zzma/boulder/goodkey"
 	blog "github.com/zzma/boulder/log"
 	"github.com/zzma/boulder/metrics"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Miscellaneous PKIX OIDs that we need to refer to
@@ -111,6 +112,7 @@ const (
 // CertificateAuthorityImpl represents a CA that signs certificates, CRLs, and
 // OCSP responses.
 type CertificateAuthorityImpl struct {
+	configPath   string
 	rsaProfile   string
 	ecdsaProfile string
 	// A map from issuer cert common name to an internalIssuer struct
@@ -145,6 +147,15 @@ type internalIssuer struct {
 	cert       *x509.Certificate
 	eeSigner   *local.Signer
 	ocspSigner ocsp.Signer
+}
+
+// Hacky-copy of struct from boulder-ca/main.go
+type config struct {
+	CA ca_config.CAConfig
+
+	PA cmd.PAConfig
+
+	Syslog cmd.SyslogConfig
 }
 
 func makeInternalIssuers(
@@ -188,6 +199,7 @@ func makeInternalIssuers(
 // from a single issuer (the first first in the issuers slice), and can sign OCSP
 // for any of the issuer certificates provided.
 func NewCertificateAuthorityImpl(
+	configPath string,
 	config ca_config.CAConfig,
 	sa certificateStorage,
 	pa core.PolicyAuthority,
@@ -260,6 +272,7 @@ func NewCertificateAuthorityImpl(
 	stats.MustRegister(signatureCount)
 
 	ca = &CertificateAuthorityImpl{
+		configPath:        configPath,
 		sa:                sa,
 		pa:                pa,
 		issuers:           internalIssuers,
@@ -414,7 +427,50 @@ func (ca *CertificateAuthorityImpl) GenerateOCSP(ctx context.Context, xferObj co
 	return ocspResponse, err
 }
 
+func (ca *CertificateAuthorityImpl) reloadCFSSLConfig() error {
+
+	var c config
+	err := cmd.ReadConfigFile(ca.configPath, &c)
+	cmd.FailOnError(err, "Reading JSON config file into config structure")
+
+	// CFSSL requires processing JSON configs through its own LoadConfig, so we
+	// serialize and then deserialize.
+	cfsslJSON, err := json.Marshal(c.CA.CFSSL)
+	if err != nil {
+		return err
+	}
+	cfsslConfigObj, err := cfsslConfig.LoadConfig(cfsslJSON)
+	if err != nil {
+		return err
+	}
+
+	issuers, err := LoadIssuers(c.CA)
+	cmd.FailOnError(err, "Couldn't load issuers")
+
+	internalIssuers, err := makeInternalIssuers(
+		issuers,
+		cfsslConfigObj.Signing,
+		c.CA.LifespanOCSP.Duration)
+	if err != nil {
+		return err
+	}
+
+	defaultIssuer := internalIssuers[issuers[0].Cert.Subject.CommonName]
+
+	rsaProfile := c.CA.RSAProfile
+	ecdsaProfile := c.CA.ECDSAProfile
+
+	ca.issuers = internalIssuers
+	ca.defaultIssuer = defaultIssuer
+	ca.rsaProfile = rsaProfile
+	ca.ecdsaProfile = ecdsaProfile
+
+	return nil
+}
+
 func (ca *CertificateAuthorityImpl) IssuePrecertificate(ctx context.Context, issueReq *caPB.IssueCertificateRequest) (*caPB.IssuePrecertificateResponse, error) {
+	ca.reloadCFSSLConfig()
+
 	serialBigInt, validity, err := ca.generateSerialNumberAndValidity()
 	if err != nil {
 		return nil, err
