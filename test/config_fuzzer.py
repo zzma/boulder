@@ -196,10 +196,15 @@ def fuzz(iterations):
 
     configs = []
     for iteration in range(1, iterations + 1):
+        sample = random.sample(ALL_OPTIONS['CSRWhitelist'], random.randint(0, len(ALL_OPTIONS['CSRWhitelist'])))
+        csr_whitelist = {}
+        for item in csr_whitelist:
+            csr_whitelist[item] = True
+
         options = {
             'usages': random.sample(ALL_OPTIONS['usages'], random.randint(0, len(ALL_OPTIONS['usages']))),
             'policies': random.sample(ALL_OPTIONS['policies'], random.randint(0, len(ALL_OPTIONS['policies']))),
-            'CSRWhitelist': random.sample(ALL_OPTIONS['CSRWhitelist'], random.randint(0, len(ALL_OPTIONS['CSRWhitelist']))),
+            'CSRWhitelist': csr_whitelist,
             'allowed_extensions': random.sample(ALL_OPTIONS['allowed_extensions'], random.randint(0, len(ALL_OPTIONS['allowed_extensions']))),
         }
 
