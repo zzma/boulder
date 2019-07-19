@@ -1,0 +1,19 @@
+{
+  "certChecker": {
+    "dbConnectFile": "test/secrets/cert_checker_dburl",
+    "maxDBConns": 10,
+    "hostnamePolicyFile": "test/hostname-policy.yaml"
+  },
+
+  "pa": {
+    "challenges": {
+      "http-01": true,
+      "dns-01": true
+    }
+  },
+
+  "syslog": {
+    "stdoutlevel": 6,
+    "sysloglevel": 4
+  }
+}

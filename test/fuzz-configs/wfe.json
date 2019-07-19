@@ -1,0 +1,45 @@
+{
+  "wfe": {
+    "listenAddress": "0.0.0.0:4000",
+    "TLSListenAddress": "0.0.0.0:4430",
+    "serverCertificatePath": "test/wfe-tls/boulder/cert.pem",
+    "serverKeyPath": "test/wfe-tls/boulder/key.pem",
+    "requestTimeout": "10s",
+    "allowOrigins": ["*"],
+    "certCacheDuration": "6h",
+    "certNoCacheExpirationWindow": "96h",
+    "indexCacheDuration": "24h",
+    "issuerCacheDuration": "48h",
+    "shutdownStopTimeout": "10s",
+    "subscriberAgreementURL": "http://boulder:4000/terms/v1",
+    "acceptRevocationReason": true,
+    "allowAuthzDeactivation": true,
+    "debugAddr": ":8000",
+    "directoryCAAIdentity": "happy-hacker-ca.invalid",
+    "directoryWebsite": "https://github.com/letsencrypt/boulder",
+    "tls": {
+      "caCertFile": "test/grpc-creds/minica.pem",
+      "certFile": "test/grpc-creds/wfe.boulder/cert.pem",
+      "keyFile": "test/grpc-creds/wfe.boulder/key.pem"
+    },
+    "raService": {
+      "serverAddress": "ra.boulder:9094",
+      "timeout": "20s"
+    },
+    "saService": {
+      "serverAddress": "sa.boulder:9095",
+      "timeout": "15s"
+    },
+    "features": {
+    }
+  },
+
+  "syslog": {
+    "stdoutlevel": 4,
+    "sysloglevel": 4
+  },
+
+  "common": {
+    "issuerCert": "test/test-ca2.pem"
+  }
+}

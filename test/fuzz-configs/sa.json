@@ -1,0 +1,34 @@
+{
+  "sa": {
+    "dbConnectFile": "test/secrets/sa_dburl",
+    "maxDBConns": 100,
+    "maxConcurrentRPCServerRequests": 100000,
+    "ParallelismPerRPC": 20,
+    "debugAddr": ":8003",
+    "tls": {
+      "caCertFile": "test/grpc-creds/minica.pem",
+      "certFile": "test/grpc-creds/sa.boulder/cert.pem",
+      "keyFile": "test/grpc-creds/sa.boulder/key.pem"
+    },
+    "grpc": {
+      "address": ":9095",
+      "clientNames": [
+        "admin-revoker.boulder",
+        "ca.boulder",
+        "expiration-mailer.boulder",
+        "ocsp-updater.boulder",
+        "orphan-finder.boulder",
+        "ra.boulder",
+        "sa.boulder",
+        "wfe.boulder"
+      ]
+    },
+    "features": {
+    }
+  },
+
+  "syslog": {
+    "stdoutlevel": 6,
+    "sysloglevel": 4
+  }
+}
