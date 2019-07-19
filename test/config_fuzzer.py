@@ -2,6 +2,7 @@
 import copy
 import json
 import logging
+import os
 import random
 
 logger = logging.getLogger(__name__)
@@ -229,12 +230,14 @@ def generate_config(options):
     ecdsaConfig['CSRWhitelist'] = options['CSRWhitelist']
     ecdsaConfig['allowed_extensions'] = options['allowed_extensions']
 
-    # write config to the appropriate files
-    with open('test/fuzz-configs/ca-a.json', 'w') as f1, open('test/fuzz-configs/ca-b.json', 'w') as f2:
-        json.dump(new_config, f1, indent=4, ensure_ascii=False)
-        json.dump(new_config, f2, indent=4, ensure_ascii=False)
-
     return new_config
+
+def write_config(config, config_dir):
+    # write config to the appropriate files
+    with open(os.path.join(config_dir, 'ca-a.json'), 'w') as f1, open(os.path.join(config_dir, 'ca-a.json'), 'w') as f2:
+        json.dump(config, f1, indent=4, ensure_ascii=False)
+        json.dump(config, f2, indent=4, ensure_ascii=False)
+
 
 if __name__ == "__main__":
     print(fuzz(10))

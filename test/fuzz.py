@@ -12,6 +12,7 @@ import startservers
 
 import chisel2
 import csr_fuzzer
+import config_fuzzer
 import traceback
 
 from helpers import *
@@ -65,6 +66,29 @@ def main():
 
 
 def run_fuzz():
+    # run_fuzz_csrs()
+    run_fuzz_configs()
+
+def run_fuzz_configs():
+    fuzzy_configs = config_fuzzer.fuzz(5)
+    for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
+        if challenge == "tls-alpn-01":
+            challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in csr_fuzzer.py
+
+        for config in fuzzy_configs:
+            config_fuzzer.write_config(config)
+            try:
+                order = chisel2.auth_and_issue(chall_type=challenge)
+                print("CERT", order.fullchain_pem)
+            except Exception:
+                traceback.print_exc()
+
+
+        if challenge == "tls-alpn-01":
+            challSrv.remove_a_record("test.domain.com") # this domain is in csr_fuzzer.py
+
+
+def run_fuzz_csrs():
     fuzzy_csrs = csr_fuzzer.fuzz(5)
     for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
         if challenge == "tls-alpn-01":
