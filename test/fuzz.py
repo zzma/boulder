@@ -78,7 +78,7 @@ def run_fuzz_configs():
         for config in fuzzy_configs:
             config_fuzzer.write_config(config, "test/fuzz-configs")
             try:
-                order = chisel2.auth_and_issue(chall_type=challenge)
+                order = chisel2.auth_and_issue(["test.domain.com"], chall_type=challenge)
                 print("CERT", order.fullchain_pem)
             except Exception:
                 traceback.print_exc()

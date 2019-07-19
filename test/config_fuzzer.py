@@ -238,7 +238,7 @@ def generate_config(options):
 
 def write_config(config, config_dir):
     # write config to the appropriate files
-    with open(os.path.join(config_dir, 'ca-a.json'), 'w') as f1, open(os.path.join(config_dir, 'ca-a.json'), 'w') as f2:
+    with open(os.path.join(config_dir, 'ca-a.json'), 'w') as f1, open(os.path.join(config_dir, 'ca-b.json'), 'w') as f2:
         json.dump(config, f1, indent=4, ensure_ascii=False)
         json.dump(config, f2, indent=4, ensure_ascii=False)
 
