@@ -1,199 +1,146 @@
 {
-    "syslog": {
-        "stdoutlevel": 6, 
-        "sysloglevel": 4
-    }, 
-    "ca": {
-        "tls": {
-            "certFile": "test/grpc-creds/ca.boulder/cert.pem", 
-            "keyFile": "test/grpc-creds/ca.boulder/key.pem", 
-            "caCertFile": "test/grpc-creds/minica.pem"
-        }, 
-        "maxConcurrentRPCServerRequests": 100000, 
-        "features": {}, 
-        "maxNames": 100, 
-        "grpcCA": {
-            "clientNames": [
-                "ra.boulder"
-            ], 
-            "address": ":9093"
-        }, 
-        "backdate": "1h", 
-        "grpcOCSPGenerator": {
-            "clientNames": [
-                "ocsp-updater.boulder"
-            ], 
-            "address": ":9096"
-        }, 
-        "saService": {
-            "serverAddress": "sa.boulder:9095", 
-            "timeout": "15s"
-        }, 
-        "lifespanOCSP": "96h", 
-        "cfssl": {
-            "signing": {
-                "default": {
-                    "usages": [
-                        "digital signature"
-                    ], 
-                    "expiry": "8760h"
-                }, 
-                "profiles": {
-                    "rsaEE": {
-                        "usages": [
-                            "email protection", 
-                            "s/mime", 
-                            "ipsec end system", 
-                            "ipsec tunnel", 
-                            "cert sign", 
-                            "ipsec user", 
-                            "content commitment", 
-                            "any", 
-                            "key encipherment", 
-                            "ocsp signing", 
-                            "client auth", 
-                            "crl sign", 
-                            "encipher only", 
-                            "data encipherment", 
-                            "digital signature", 
-                            "server auth"
-                        ], 
-                        "CSRWhitelist": [
-                            "SignatureAlgorithm", 
-                            "DNSNames", 
-                            "PublicKey", 
-                            "PublicKeyAlgorithm", 
-                            "URIs", 
-                            "Subject", 
-                            "IPAddresses", 
-                            "EmailAddresses"
-                        ], 
-                        "ocsp_url": "http://127.0.0.1:4002/", 
-                        "allowed_extensions": [
-                            "2.5.29.37", 
-                            "2.5.29.31", 
-                            "1.3.6.1.5.5.7.48.4", 
-                            "2.5.29.32", 
-                            "2.5.29.36", 
-                            "2.5.29.18", 
-                            "2.5.29.35", 
-                            "1.3.6.1.5.5.7.1.1", 
-                            "2.5.29.30", 
-                            "2.5.29.17", 
-                            "2.5.29.19", 
-                            "2.5.29.9", 
-                            "1.3.6.1.4.1.11129.2.4.2", 
-                            "2.5.29.16", 
-                            "2.5.29.33", 
-                            "2.5.29.15", 
-                            "2.5.29.14"
-                        ], 
-                        "backdate": "1h", 
-                        "expiry": "2160h", 
-                        "ca_constraint": {
-                            "is_ca": false
-                        }, 
-                        "crl_url": "http://example.com/crl", 
-                        "policies": [
-                            {
-                                "ID": "2.23.140.1.2.1"
-                            }
-                        ], 
-                        "ClientProvidesSerialNumbers": true, 
-                        "issuer_urls": [
-                            "http://boulder:4430/acme/issuer-cert"
-                        ]
-                    }, 
-                    "ecdsaEE": {
-                        "usages": [
-                            "email protection", 
-                            "s/mime", 
-                            "ipsec end system", 
-                            "ipsec tunnel", 
-                            "cert sign", 
-                            "ipsec user", 
-                            "content commitment", 
-                            "any", 
-                            "key encipherment", 
-                            "ocsp signing", 
-                            "client auth", 
-                            "crl sign", 
-                            "encipher only", 
-                            "data encipherment", 
-                            "digital signature", 
-                            "server auth"
-                        ], 
-                        "CSRWhitelist": [
-                            "SignatureAlgorithm", 
-                            "DNSNames", 
-                            "PublicKey", 
-                            "PublicKeyAlgorithm", 
-                            "URIs", 
-                            "Subject", 
-                            "IPAddresses", 
-                            "EmailAddresses"
-                        ], 
-                        "is_ca": false, 
-                        "ocsp_url": "http://127.0.0.1:4002/", 
-                        "backdate": "1h", 
-                        "expiry": "2160h", 
-                        "allowed_extensions": [
-                            "2.5.29.37", 
-                            "2.5.29.31", 
-                            "1.3.6.1.5.5.7.48.4", 
-                            "2.5.29.32", 
-                            "2.5.29.36", 
-                            "2.5.29.18", 
-                            "2.5.29.35", 
-                            "1.3.6.1.5.5.7.1.1", 
-                            "2.5.29.30", 
-                            "2.5.29.17", 
-                            "2.5.29.19", 
-                            "2.5.29.9", 
-                            "1.3.6.1.4.1.11129.2.4.2", 
-                            "2.5.29.16", 
-                            "2.5.29.33", 
-                            "2.5.29.15", 
-                            "2.5.29.14"
-                        ], 
-                        "crl_url": "http://example.com/crl", 
-                        "policies": [
-                            {
-                                "ID": "2.23.140.1.2.1"
-                            }
-                        ], 
-                        "ClientProvidesSerialNumbers": true, 
-                        "issuer_urls": [
-                            "http://127.0.0.1:4000/acme/issuer-cert"
-                        ]
-                    }
-                }
-            }
-        }, 
-        "ecdsaProfile": "ecdsaEE", 
-        "rsaProfile": "rsaEE", 
-        "debugAddr": ":8001", 
-        "weakKeyDirectory": "test/example-weak-keys.json", 
-        "expiry": "2160h", 
-        "serialPrefix": 255, 
-        "hostnamePolicyFile": "test/hostname-policy.yaml", 
-        "Issuers": [
-            {
-                "CertFile": "test/test-ca2.pem", 
-                "ConfigFile": "test/test-ca.key-pkcs11.json", 
-                "NumSessions": 2
-            }, 
-            {
-                "CertFile": "test/test-ca.pem", 
-                "ConfigFile": "test/test-ca.key-pkcs11.json", 
-                "NumSessions": 2
-            }
-        ]
-    }, 
-    "pa": {
-        "challenges": {
-            "http-01": true, 
-            "dns-01": true
+  "ca": {
+    "serialPrefix": 255,
+    "rsaProfile": "rsaEE",
+    "ecdsaProfile": "ecdsaEE",
+    "debugAddr": ":8001",
+    "weakKeyDirectory": "test/example-weak-keys.json",
+    "tls": {
+      "caCertFile": "test/grpc-creds/minica.pem",
+      "certFile": "test/grpc-creds/ca.boulder/cert.pem",
+      "keyFile": "test/grpc-creds/ca.boulder/key.pem"
+    },
+    "saService": {
+      "serverAddress": "sa.boulder:9095",
+      "timeout": "15s"
+    },
+    "grpcCA": {
+      "address": ":9093",
+      "clientNames": [
+        "ra.boulder"
+      ]
+    },
+    "grpcOCSPGenerator": {
+      "address": ":9096",
+      "clientNames": [
+        "ocsp-updater.boulder"
+      ]
+    },
+    "Issuers": [{
+      "ConfigFile": "test/test-ca.key-pkcs11.json",
+      "CertFile": "test/test-ca2.pem",
+      "NumSessions": 2
+    }, {
+      "ConfigFile": "test/test-ca.key-pkcs11.json",
+      "CertFile": "test/test-ca.pem",
+      "NumSessions": 2
+    }],
+    "expiry": "2160h",
+    "backdate": "1h",
+    "lifespanOCSP": "96h",
+    "maxNames": 100,
+    "hostnamePolicyFile": "test/hostname-policy.yaml",
+    "cfssl": {
+      "signing": {
+        "profiles": {
+          "rsaEE": {
+            "usages": [
+              "digital signature",
+              "key encipherment",
+              "server auth",
+              "client auth"
+            ],
+            "backdate": "1h",
+            "ca_constraint": { "is_ca": false },
+            "issuer_urls": [
+              "http://boulder:4430/acme/issuer-cert"
+            ],
+            "ocsp_url": "http://127.0.0.1:4002/",
+            "crl_url": "http://example.com/crl",
+            "policies": [
+              {
+                "ID": "2.23.140.1.2.1"
+              },
+              {
+                "ID": "1.2.3.4",
+                "Qualifiers": [ {
+                  "type": "id-qt-cps",
+                  "value": "http://example.com/cps"
+                }, {
+                  "type": "id-qt-unotice",
+                  "value": "Do What Thou Wilt"
+                } ]
+              }
+            ],
+            "expiry": "2160h",
+            "CSRWhitelist": {
+              "PublicKeyAlgorithm": true,
+              "PublicKey": true,
+              "SignatureAlgorithm": true
+            },
+            "ClientProvidesSerialNumbers": true,
+            "allowed_extensions": [ "1.3.6.1.5.5.7.1.24" ]
+          },
+          "ecdsaEE": {
+            "usages": [
+              "digital signature",
+              "server auth",
+              "client auth"
+            ],
+            "backdate": "1h",
+            "is_ca": false,
+            "issuer_urls": [
+              "http://127.0.0.1:4000/acme/issuer-cert"
+            ],
+            "ocsp_url": "http://127.0.0.1:4002/",
+            "crl_url": "http://example.com/crl",
+            "policies": [
+              {
+                "ID": "2.23.140.1.2.1"
+              },
+              {
+                "ID": "1.2.3.4",
+                "Qualifiers": [ {
+                  "type": "id-qt-cps",
+                  "value": "http://example.com/cps"
+                }, {
+                  "type": "id-qt-unotice",
+                  "value": "Do What Thou Wilt"
+                } ]
+              }
+            ],
+            "expiry": "2160h",
+            "CSRWhitelist": {
+              "PublicKeyAlgorithm": true,
+              "PublicKey": true,
+              "SignatureAlgorithm": true
+            },
+            "ClientProvidesSerialNumbers": true,
+            "allowed_extensions": [ "1.3.6.1.5.5.7.1.24" ]
+          }
+        },
+        "default": {
+          "usages": [
+            "digital signature"
+          ],
+          "expiry": "8760h"
         }
+      }
+    },
+    "maxConcurrentRPCServerRequests": 100000,
+    "features": {
     }
+  },
+
+  "pa": {
+    "challenges": {
+      "http-01": true,
+      "dns-01": true
+    }
+  },
+
+  "syslog": {
+    "stdoutlevel": 6,
+    "sysloglevel": 4
+  }
 }

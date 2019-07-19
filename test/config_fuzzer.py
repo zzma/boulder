@@ -198,7 +198,7 @@ def fuzz(iterations):
     for iteration in range(1, iterations + 1):
         sample = random.sample(ALL_OPTIONS['CSRWhitelist'], random.randint(0, len(ALL_OPTIONS['CSRWhitelist'])))
         csr_whitelist = {}
-        for item in csr_whitelist:
+        for item in sample:
             csr_whitelist[item] = True
 
         options = {
@@ -220,7 +220,6 @@ def fuzz(iterations):
 
 
 def generate_config(options):
-    config_dir = "test/fuzz-configs"
     # write config to a json file in config_dir
     new_config = copy.deepcopy(CONFIG_TEMPLATE)
     rsaConfig = new_config['ca']['cfssl']['signing']['profiles']['rsaEE']
