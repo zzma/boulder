@@ -76,7 +76,7 @@ def run_fuzz_configs():
             challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in csr_fuzzer.py
 
         for config in fuzzy_configs:
-            config_fuzzer.write_config(config)
+            config_fuzzer.write_config(config, "test/fuzz-configs")
             try:
                 order = chisel2.auth_and_issue(chall_type=challenge)
                 print("CERT", order.fullchain_pem)

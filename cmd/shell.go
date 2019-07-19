@@ -260,6 +260,7 @@ func LoadCert(path string) (cert []byte, err error) {
 // unmarshal the content of the file into a struct containing a
 // configuration of a boulder component.
 func ReadConfigFile(filename string, out interface{}) error {
+	fmt.Printf("Reading config file: %s\n", filename)
 	configData, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return err
