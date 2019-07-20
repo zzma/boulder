@@ -31,6 +31,8 @@ def main():
                         help="run the certbot integration tests")
     parser.add_argument('--fuzz', dest="run_fuzz", action="store_true",
                         help="run fuzzing stuff with chisel")
+    parser.add_argument('--iter', dest="iters", action="store", type=int,
+                        help="number of fuzzing iterations")
     parser.add_argument('--load', dest="run_loadtest", action="store_true",
                         help="run load-generator")
     parser.add_argument('--filter', dest="test_case_filter", action="store",
@@ -53,7 +55,7 @@ def main():
         raise Exception("startservers failed")
 
     if args.run_all or args.run_fuzz:
-        run_fuzz()
+        run_fuzz(args.iter)
 
     if args.custom:
         run(args.custom)
@@ -65,15 +67,15 @@ def main():
     exit_status = 0
 
 
-def run_fuzz():
-    # run_fuzz_csrs()
-    run_fuzz_configs()
+def run_fuzz(rounds):
+    # run_fuzz_csrs(rounds)
+    run_fuzz_configs(rounds)
 
-def run_fuzz_configs():
-    fuzzy_configs = config_fuzzer.fuzz(5)
+def run_fuzz_configs(rounds):
+    fuzzy_configs = config_fuzzer.fuzz(rounds)
     for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
         if challenge == "tls-alpn-01":
-            challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in csr_fuzzer.py
+            challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in config_fuzzer.py
 
         for config in fuzzy_configs:
             config_fuzzer.write_config(config, "test/fuzz-configs")
@@ -85,11 +87,11 @@ def run_fuzz_configs():
 
 
         if challenge == "tls-alpn-01":
-            challSrv.remove_a_record("test.domain.com") # this domain is in csr_fuzzer.py
+            challSrv.remove_a_record("test.domain.com") # this domain is in config_fuzzer.py
 
 
-def run_fuzz_csrs():
-    fuzzy_csrs = csr_fuzzer.fuzz(5)
+def run_fuzz_csrs(rounds):
+    fuzzy_csrs = csr_fuzzer.fuzz(rounds)
     for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
         if challenge == "tls-alpn-01":
             challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in csr_fuzzer.py
