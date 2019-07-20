@@ -121,9 +121,8 @@ fi
 if [[ "$RUN" =~ "fuzz" ]] ; then
   args=("--fuzz")
   if [["$ITER" -gt 0 ]]; then
-    args+=("--iter $ITER")
-  else
-    args+=("--iter 10")
+    args+=("--iter")
+    args+=("$ITER")
   fi
   if [[ "${INT_SKIP_LOAD:-}" == "" ]]; then
     args+=("--load")

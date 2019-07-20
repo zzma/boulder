@@ -31,7 +31,7 @@ def main():
                         help="run the certbot integration tests")
     parser.add_argument('--fuzz', dest="run_fuzz", action="store_true",
                         help="run fuzzing stuff with chisel")
-    parser.add_argument('--iter', dest="iters", action="store", type=int,
+    parser.add_argument('--iter', dest="iters", action="store", type=int, default=5,
                         help="number of fuzzing iterations")
     parser.add_argument('--load', dest="run_loadtest", action="store_true",
                         help="run load-generator")
@@ -68,8 +68,8 @@ def main():
 
 
 def run_fuzz(rounds):
-    # run_fuzz_csrs(rounds)
-    run_fuzz_configs(rounds)
+    run_fuzz_csrs(rounds)
+    # run_fuzz_configs(rounds)
 
 def run_fuzz_configs(rounds):
     fuzzy_configs = config_fuzzer.fuzz(rounds)
