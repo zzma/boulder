@@ -120,7 +120,7 @@ fi
 #
 if [[ "$RUN" =~ "fuzz" ]] ; then
   args=("--fuzz")
-  if [["$ITER" -gt 0 ]]; then
+  if [[ ("$ITER" > 0) ]]; then
     args+=("--iter")
     args+=("$ITER")
   fi

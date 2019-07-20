@@ -55,7 +55,7 @@ def main():
         raise Exception("startservers failed")
 
     if args.run_all or args.run_fuzz:
-        run_fuzz(args.iter)
+        run_fuzz(args.iters)
 
     if args.custom:
         run(args.custom)
