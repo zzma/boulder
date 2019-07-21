@@ -72,7 +72,8 @@ def main():
 
 def run_fuzz_configs(rounds):
     fuzzy_configs = config_fuzzer.fuzz(rounds)
-    for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
+    # for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
+    for challenge in ["http-01"]: #TODO: do i really need these different auth mechanisms?
         if challenge == "tls-alpn-01":
             challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in config_fuzzer.py
 
@@ -91,7 +92,8 @@ def run_fuzz_configs(rounds):
 
 def run_fuzz_csrs(rounds):
     fuzzy_csrs = csr_fuzzer.fuzz(rounds)
-    for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
+    # for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
+    for challenge in ["http-01"]: #TODO: do i really need these different auth mechanisms?
         if challenge == "tls-alpn-01":
             challSrv.add_a_record("test.domain.com", ["10.88.88.88"]) # this domain is in csr_fuzzer.py
 
