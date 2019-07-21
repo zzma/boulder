@@ -121,9 +121,15 @@ fi
 if [[ "$RUN" =~ "fuzz" ]] ; then
   args=("--fuzz")
   if [[ ("$ITER" > 0) ]]; then
-    args+=("--iter")
-    args+=("$ITER")
+    args+=("--iter" "$ITER")
   fi
+
+  if [[ "$FUZZ_TYPE" =~ "csr" ]]; then
+    args+=("--type" "csr")
+  elif [[ "$FUZZ_TYPE" =~ "config" ]]; then
+    args+=("--type" "config")
+  fi
+  
   if [[ "${INT_SKIP_LOAD:-}" == "" ]]; then
     args+=("--load")
   fi

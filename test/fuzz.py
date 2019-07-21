@@ -33,6 +33,8 @@ def main():
                         help="run fuzzing stuff with chisel")
     parser.add_argument('--iter', dest="iters", action="store", type=int, default=5,
                         help="number of fuzzing iterations")
+    parser.add_argument('--type', dest="fuzz_type", action="store", type=int, default='csr',
+                        help="type of fuzzing (csr/config)")
     parser.add_argument('--load', dest="run_loadtest", action="store_true",
                         help="run load-generator")
     parser.add_argument('--filter', dest="test_case_filter", action="store",
@@ -54,8 +56,10 @@ def main():
     if not startservers.start(race_detection=True, config_dir=config):
         raise Exception("startservers failed")
 
-    if args.run_all or args.run_fuzz:
-        run_fuzz(args.iters)
+    if args.fuzz_type.lower() == 'csr':
+        run_fuzz_csrs(args.iters)
+    elif args.fuzz_type.lower() == 'config':
+        run_fuzz_configs(args.iters)
 
     if args.custom:
         run(args.custom)
@@ -65,11 +69,6 @@ def main():
 
     global exit_status
     exit_status = 0
-
-
-def run_fuzz(rounds):
-    run_fuzz_csrs(rounds)
-    # run_fuzz_configs(rounds)
 
 def run_fuzz_configs(rounds):
     fuzzy_configs = config_fuzzer.fuzz(rounds)
