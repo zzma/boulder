@@ -33,7 +33,7 @@ def main():
                         help="run fuzzing stuff with chisel")
     parser.add_argument('--iter', dest="iters", action="store", type=int, default=5,
                         help="number of fuzzing iterations")
-    parser.add_argument('--type', dest="fuzz_type", action="store", type=int, default='csr',
+    parser.add_argument('--type', dest="fuzz_type", action="store", type=str, default='csr',
                         help="type of fuzzing (csr/config)")
     parser.add_argument('--load', dest="run_loadtest", action="store_true",
                         help="run load-generator")
