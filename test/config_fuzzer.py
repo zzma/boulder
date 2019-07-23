@@ -23,8 +23,8 @@ ALL_OPTIONS = {
         "decipher only",
         # ExtKeyUsage contains a mapping of string names to extended key
         "any",
-        "server auth",
-        "client auth",
+        # "server auth", # TODO: required
+        # "client auth", # TODO: required
         "code signing",
         "email protection",
         "s/mime",
@@ -201,8 +201,10 @@ def fuzz(iterations):
         for item in sample:
             csr_whitelist[item] = True
 
+        usages = random.sample(ALL_OPTIONS['usages'], random.randint(0, len(ALL_OPTIONS['usages'])))
+        usages.extend(['server auth', 'client auth'])
         options = {
-            'usages': random.sample(ALL_OPTIONS['usages'], random.randint(0, len(ALL_OPTIONS['usages']))),
+            'usages': usages,
             'policies': random.sample(ALL_OPTIONS['policies'], random.randint(0, len(ALL_OPTIONS['policies']))),
             'CSRWhitelist': csr_whitelist,
             'allowed_extensions': random.sample(ALL_OPTIONS['allowed_extensions'], random.randint(0, len(ALL_OPTIONS['allowed_extensions']))),
