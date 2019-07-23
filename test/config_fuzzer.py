@@ -28,15 +28,14 @@ ALL_OPTIONS = {
         "code signing",
         "email protection",
         "s/mime",
-        "ipsec end system",
-        "ipsec tunnel",
-        "ipsec user",
-        "timestamping",
-        "ocsp signing",
-        "microsoft sgc",
-        "netscape sgc",
+        # "ipsec end system",
+        # "ipsec tunnel",
+        # "ipsec user",
+        # "timestamping",
+        # "ocsp signing",
+        # "microsoft sgc",
+        # "netscape sgc",
     ],
-    # other types of public keys are not supported by pyopenssl - not sure how to get ECDSA or EdDSA/Ed25519
     'policies': [
         {
             "ID": "2.23.140.1.2.1"
@@ -58,9 +57,9 @@ ALL_OPTIONS = {
         "PublicKey",
         "SignatureAlgorithm",
         "DNSNames",
-        "IPAddresses",
-        "EmailAddresses",
-        "URIs",
+        # "IPAddresses",
+        # "EmailAddresses",
+        # "URIs",
     ],
     'allowed_extensions': [
         "2.5.29.14", # subjectKeyIdentifier
@@ -76,6 +75,7 @@ ALL_OPTIONS = {
         "1.3.6.1.5.5.7.1.1", # authorityInfoAccess
         "1.3.6.1.4.1.11129.2.4.2", # signedCertificateTimestampList
         "1.3.6.1.5.5.7.48.4", # OCSPNocheck
+        "1.3.6.1.5.5.7.1.24", #TLS feature extension (usually OCSP stapling)
         "2.5.29.36", # policyConstraints
         "2.5.29.33", # policyMappings
         "2.5.29.16", # privateKeyUsagePeriod

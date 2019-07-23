@@ -36,7 +36,7 @@ ALL_OPTIONS = {
                  "SHA512",
                  "whirlpool",
                  ],
-    'extensions': [
+    'extensions': [ # TODO: add more extensions and critical ones...
         crypto.X509Extension(
             b'subjectAltName',
             critical=False,
