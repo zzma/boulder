@@ -23,6 +23,7 @@ challSrv = challtestsrv.ChallTestServer()
 
 exit_status = 1
 
+
 def main():
     parser = argparse.ArgumentParser(description='Run integration tests')
     parser.add_argument('--all', dest="run_all", action="store_true",
@@ -70,6 +71,7 @@ def main():
     global exit_status
     exit_status = 0
 
+
 def run_fuzz_configs(rounds):
     fuzzy_configs = config_fuzzer.fuzz(rounds)
     # for challenge in ["http-01", "dns-01", "tls-alpn-01"]: #TODO: do i really need these different auth mechanisms?
@@ -84,7 +86,6 @@ def run_fuzz_configs(rounds):
                 print("CERT", order.fullchain_pem)
             except Exception:
                 traceback.print_exc()
-
 
         if challenge == "tls-alpn-01":
             challSrv.remove_a_record("test.domain.com") # this domain is in config_fuzzer.py
@@ -105,15 +106,16 @@ def run_fuzz_csrs(rounds):
             except Exception:
                 traceback.print_exc()
 
-
         if challenge == "tls-alpn-01":
             challSrv.remove_a_record("test.domain.com") # this domain is in csr_fuzzer.py
+
 
 if __name__ == "__main__":
     try:
         main()
     except subprocess.CalledProcessError as e:
         raise Exception("%s. Output:\n%s" % (e, e.output))
+
 
 @atexit.register
 def stop():

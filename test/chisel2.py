@@ -37,13 +37,15 @@ logger = logging.getLogger()
 logger.setLevel(int(os.getenv('LOGLEVEL', 20)))
 
 DIRECTORY_V2 = os.getenv('DIRECTORY_V2', 'http://localhost:4001/directory')
-ACCEPTABLE_TOS = os.getenv('ACCEPTABLE_TOS',"https://boulder:4431/terms/v7")
+ACCEPTABLE_TOS = os.getenv('ACCEPTABLE_TOS', "https://boulder:4431/terms/v7")
 PORT = os.getenv('PORT', '5002')
 
 os.environ.setdefault('REQUESTS_CA_BUNDLE', 'test/wfe-tls/minica.pem')
 
 import challtestsrv
+
 challSrv = challtestsrv.ChallTestServer()
+
 
 def uninitialized_client(key=None):
     if key is None:
@@ -52,16 +54,18 @@ def uninitialized_client(key=None):
     directory = messages.Directory.from_json(net.get(DIRECTORY_V2).json())
     return acme_client.ClientV2(directory, net)
 
+
 def make_client(email=None):
     """Build an acme.Client and register a new account with a random key."""
     client = uninitialized_client()
     tos = client.directory.meta.terms_of_service
     if tos == ACCEPTABLE_TOS:
         client.net.account = client.new_account(messages.NewRegistration.from_data(email=email,
-            terms_of_service_agreed=True))
+                                                                                   terms_of_service_agreed=True))
     else:
         raise Exception("Unrecognized terms of service URL %s" % tos)
     return client
+
 
 def get_chall(authz, typ):
     for chall_body in authz.body.challenges:
@@ -69,18 +73,21 @@ def get_chall(authz, typ):
             return chall_body
     raise Exception("No %s challenge found" % typ.typ)
 
+
 def make_csr(domains):
     key = OpenSSL.crypto.PKey()
     key.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
     pem = OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, key)
     return acme_crypto_util.make_csr(pem, domains, False)
 
+
 def http_01_answer(client, chall_body):
     """Return an HTTP01Resource to server in response to the given challenge."""
     response, validation = chall_body.response_and_validation(client.net.key)
     return standalone.HTTP01RequestHandler.HTTP01Resource(
-          chall=chall_body.chall, response=response,
-          validation=validation)
+        chall=chall_body.chall, response=response,
+        validation=validation)
+
 
 def auth_and_issue(domains, chall_type="dns-01", email=None, client=None):
     """Make authzs for each of the given domains, set up a server to answer the
@@ -108,6 +115,7 @@ def auth_and_issue(domains, chall_type="dns-01", email=None, client=None):
         cleanup()
 
     return order
+
 
 def auth_and_issue_csr(csr_pem, chall_type="dns-01", email=None, client=None):
     """Make authzs for each of the given domains, set up a server to answer the
@@ -141,14 +149,17 @@ def do_dns_challenges(client, authzs):
     for a in authzs:
         c = get_chall(a, challenges.DNS01)
         name, value = (c.validation_domain_name(a.body.identifier.value),
-            c.validation(client.net.key))
+                       c.validation(client.net.key))
         cleanup_hosts.append(name)
         challSrv.add_dns01_response(name, value)
         client.answer_challenge(c, c.response(client.net.key))
+
     def cleanup():
         for host in cleanup_hosts:
             challSrv.remove_dns01_response(host)
+
     return cleanup
+
 
 def do_http_challenges(client, authzs):
     cleanup_tokens = []
@@ -173,7 +184,9 @@ def do_http_challenges(client, authzs):
         # the tokens we added.
         for token in cleanup_tokens:
             challSrv.remove_http01_response(token)
+
     return cleanup
+
 
 def do_tlsalpn_challenges(client, authzs):
     cleanup_hosts = []
@@ -183,10 +196,13 @@ def do_tlsalpn_challenges(client, authzs):
         cleanup_hosts.append(name)
         challSrv.add_tlsalpn01_response(name, value)
         client.answer_challenge(c, c.response(client.net.key))
+
     def cleanup():
         for host in cleanup_hosts:
             challSrv.remove_tlsalpn01_response(host)
+
     return cleanup
+
 
 def expect_problem(problem_type, func):
     """Run a function. If it raises an acme_errors.ValidationError or messages.Error that
@@ -210,6 +226,7 @@ def expect_problem(problem_type, func):
                     raise Exception("Expected %s, got %s" % (problem_type, error.__str__()))
     if not ok:
         raise Exception('Expected %s, got no error' % problem_type)
+
 
 if __name__ == "__main__":
     # Die on SIGINT
