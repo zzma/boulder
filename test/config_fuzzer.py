@@ -81,7 +81,11 @@ ALL_OPTIONS = {
         "2.5.29.16", # privateKeyUsagePeriod
         "2.5.29.9", # subjectDirectoryAttributes
     ],
-    'crl': ['http://example.com/crl',''],
+    'crl': ['', 'http://example.com/crl'],
+    'oscp': ['', 'http://127.0.0.1:4002/'],
+    'issuer_urls': [
+        'http://boulder:4430/acme/issuer-cert',
+    ],
 }
 
 CONFIG_TEMPLATE = {
@@ -206,10 +210,12 @@ def fuzz(iterations):
         usages.extend(['server auth', 'client auth'])
         options = {
             'usages': usages,
-            'crl': random.sample(ALL_OPTIONS['crl'], 1),
+            'crl': random.choice(ALL_OPTIONS['crl']),
+            'ocsp': random.choice(ALL_OPTIONS['ocsp']),
             'policies': random.sample(ALL_OPTIONS['policies'], random.randint(0, len(ALL_OPTIONS['policies']))),
             'CSRWhitelist': csr_whitelist,
             'allowed_extensions': random.sample(ALL_OPTIONS['allowed_extensions'], random.randint(0, len(ALL_OPTIONS['allowed_extensions']))),
+            'issuer_urls': random.sample(ALL_OPTIONS['issuer_urls'], random.randint(0, len(ALL_OPTIONS['issuer_urls']))),
         }
 
         # TODO: implement better mutation logic / at least memoize
@@ -232,6 +238,8 @@ def generate_config(options):
     rsaConfig['CSRWhitelist'] = options['CSRWhitelist']
     rsaConfig['allowed_extensions'] = options['allowed_extensions']
     rsaConfig['crl_url'] = options['crl']
+    rsaConfig['ocsp_url'] = options['ocsp']
+    rsaConfig['issuer_urls'] = options['issuer_urls']
 
     ecdsaConfig = new_config['ca']['cfssl']['signing']['profiles']['ecdsaEE']
     ecdsaConfig['usages'] = options['usages']
@@ -239,6 +247,8 @@ def generate_config(options):
     ecdsaConfig['CSRWhitelist'] = options['CSRWhitelist']
     ecdsaConfig['allowed_extensions'] = options['allowed_extensions']
     ecdsaConfig['crl_url'] = options['crl']
+    ecdsaConfig['ocsp_url'] = options['ocsp']
+    ecdsaConfig['issuer_urls'] = options['issuer_urls']
 
     return new_config
 
