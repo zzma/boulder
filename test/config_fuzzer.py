@@ -81,7 +81,7 @@ ALL_OPTIONS = {
         "2.5.29.16", # privateKeyUsagePeriod
         "2.5.29.9", # subjectDirectoryAttributes
     ],
-    'crl': ['http://example.com/crl'],
+    'crl': ['http://example.com/crl',''],
 }
 
 CONFIG_TEMPLATE = {
@@ -206,7 +206,7 @@ def fuzz(iterations):
         usages.extend(['server auth', 'client auth'])
         options = {
             'usages': usages,
-            'crl': random.sample(ALL_OPTIONS['crl'], random.randint(0, len(ALL_OPTIONS['crl']))),
+            'crl': random.sample(ALL_OPTIONS['crl'], 1),
             'policies': random.sample(ALL_OPTIONS['policies'], random.randint(0, len(ALL_OPTIONS['policies']))),
             'CSRWhitelist': csr_whitelist,
             'allowed_extensions': random.sample(ALL_OPTIONS['allowed_extensions'], random.randint(0, len(ALL_OPTIONS['allowed_extensions']))),
