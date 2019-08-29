@@ -231,12 +231,14 @@ def generate_config(options):
     rsaConfig['policies'] = options['policies']
     rsaConfig['CSRWhitelist'] = options['CSRWhitelist']
     rsaConfig['allowed_extensions'] = options['allowed_extensions']
+    rsaConfig['crl_url'] = options['crl']
 
     ecdsaConfig = new_config['ca']['cfssl']['signing']['profiles']['ecdsaEE']
     ecdsaConfig['usages'] = options['usages']
     ecdsaConfig['policies'] = options['policies']
     ecdsaConfig['CSRWhitelist'] = options['CSRWhitelist']
     ecdsaConfig['allowed_extensions'] = options['allowed_extensions']
+    ecdsaConfig['crl_url'] = options['crl']
 
     return new_config
 
