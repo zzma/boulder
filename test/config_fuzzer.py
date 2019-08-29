@@ -82,7 +82,7 @@ ALL_OPTIONS = {
         "2.5.29.9", # subjectDirectoryAttributes
     ],
     'crl': ['', 'http://example.com/crl'],
-    'oscp': ['', 'http://127.0.0.1:4002/'],
+    'ocsp': ['', 'http://127.0.0.1:4002/'],
     'issuer_urls': [
         'http://boulder:4430/acme/issuer-cert',
     ],
