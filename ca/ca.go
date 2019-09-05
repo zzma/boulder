@@ -9,6 +9,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/asn1"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
@@ -480,6 +481,9 @@ func (ca *CertificateAuthorityImpl) IssuePrecertificate(ctx context.Context, iss
 	if err != nil {
 		return nil, err
 	}
+
+	ca.log.AuditInfof("PRECERT: %s", base64.StdEncoding.EncodeToString(precertDER))
+
 	return &caPB.IssuePrecertificateResponse{
 		DER: precertDER,
 	}, nil
